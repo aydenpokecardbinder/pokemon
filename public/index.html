@@ -151,6 +151,10 @@ label.f{display:block;font-size:.85rem;color:var(--muted);margin:10px 0 4px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
 [hidden]{display:none!important}
+.copies-badge{position:absolute;top:8px;right:8px;z-index:2;background:var(--ink);color:var(--surface);font-weight:700;font-size:.85rem;padding:2px 8px;border-radius:999px}
+.copies{display:inline-flex;align-items:center;gap:10px;margin-top:10px}
+.copies button{width:36px;height:36px;border-radius:18px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.08);color:inherit;font-size:1.2rem;cursor:pointer}
+.copies button:disabled{opacity:.35;cursor:default}
 #pending .chip-btn{margin-left:6px;height:34px;font-weight:700}
 .err-line{margin-top:8px;font-size:.85rem;color:var(--danger);word-break:break-word}
 .owner-link{font-size:.9rem;color:var(--blue);font-weight:700;text-decoration:none;padding:8px 4px}
@@ -256,6 +260,7 @@ label.f{display:block;font-size:.85rem;color:var(--muted);margin:10px 0 4px}
     <p class="name" id="vName"></p>
     <div class="nums" id="vNums"></div>
     <div id="vPrice"></div>
+    <div class="copies" id="vCopies" hidden><button type="button" id="cMinus" aria-label="One fewer copy">−</button><span id="cNum"></span><button type="button" id="cPlus" aria-label="One more copy">+</button></div>
     <div class="sub" id="vSub"></div>
   </div>
 </div>
@@ -463,6 +468,114 @@ const IP = (() => {
       if(Math.hypot(p[0]-q[c][0],p[1]-q[c][1])<R*2) out[c]=[p[0]*f,p[1]*f]; }
     return out;
   }
+
+  // ---- Remove reflections by combining two photos of the same card taken at different angles ----
+  // a, b: straightened card images of equal size. Returns a new image keeping the non-shiny parts of each.
+  function lumOf(img){ const d=img.data, L=new Float32Array(img.width*img.height); for(let i=0,k=0;i<L.length;i++,k+=4) L[i]=0.299*d[k]+0.587*d[k+1]+0.114*d[k+2]; return L; }
+  function alignOffset(La, Lb, w, h){
+    // coarse search on a 1/4 grid, then fine search; minimise mean |a-b| ignoring very bright (possible glare) pixels
+    const score=(dx,dy,step)=>{ let s=0,n=0; for(let y=40;y<h-40;y+=step){ const yb=y+dy; if(yb<0||yb>=h) continue;
+        for(let x=40;x<w-40;x+=step){ const xb=x+dx; if(xb<0||xb>=w) continue; const a=La[y*w+x], b=Lb[yb*w+xb]; if(a>235||b>235) continue; s+=Math.abs(a-b); n++; } }
+      return n? s/n : 1e9; };
+    let best=[0,0], bs=1e9;
+    for(let dy=-28;dy<=28;dy+=4) for(let dx=-28;dx<=28;dx+=4){ const v=score(dx,dy,8); if(v<bs){bs=v;best=[dx,dy];} }
+    const [cx,cy]=best;
+    for(let dy=cy-4;dy<=cy+4;dy++) for(let dx=cx-4;dx<=cx+4;dx++){ const v=score(dx,dy,4); if(v<bs){bs=v;best=[dx,dy];} }
+    return best;
+  }
+  function boxBlur(src,w,h,r){ const t=new Float32Array(w*h), o=new Float32Array(w*h);
+    for(let y=0;y<h;y++){ let acc=0; const row=y*w; for(let x=-r;x<=r;x++) acc+=src[row+Math.min(w-1,Math.max(0,x))];
+      for(let x=0;x<w;x++){ t[row+x]=acc/(2*r+1); acc+=src[row+Math.min(w-1,x+r+1)]-src[row+Math.max(0,x-r)]; } }
+    for(let x=0;x<w;x++){ let acc=0; for(let y=-r;y<=r;y++) acc+=t[Math.min(h-1,Math.max(0,y))*w+x];
+      for(let y=0;y<h;y++){ o[y*w+x]=acc/(2*r+1); acc+=t[Math.min(h-1,y+r+1)*w+x]-t[Math.max(0,y-r)*w+x]; } }
+    return o; }
+  function fuse(a, b){
+    const w=a.width, h=a.height, La=lumOf(a), Lb0=lumOf(b);
+    const [dx,dy]=alignOffset(La, Lb0, w, h);
+    // shift b onto a (edges filled from a)
+    const bd=b.data, ad=a.data, sb=new Uint8ClampedArray(ad.length), has=new Uint8Array(w*h);
+    for(let y=0;y<h;y++){ const yb=y+dy; for(let x=0;x<w;x++){ const xb=x+dx, o=(y*w+x)*4;
+      if(xb>=0&&xb<w&&yb>=0&&yb<h){ const k=(yb*w+xb)*4; sb[o]=bd[k]; sb[o+1]=bd[k+1]; sb[o+2]=bd[k+2]; has[y*w+x]=1; }
+      else { sb[o]=ad[o]; sb[o+1]=ad[o+1]; sb[o+2]=ad[o+2]; } sb[o+3]=255; } }
+    const Lb=lumOf({data:sb,width:w,height:h});
+    // match overall exposure of b to a using pixels that are not bright in either
+    let ra=[], rb=[]; for(let i=0;i<La.length;i+=7){ if(has[i] && La[i]<200 && Lb[i]<200 && La[i]>20){ ra.push(La[i]); rb.push(Lb[i]); } }
+    let gain=1; if(ra.length>100){ const sa=ra.reduce((p,q)=>p+q,0), sbm=rb.reduce((p,q)=>p+q,0); gain=Math.max(0.7,Math.min(1.4,sa/Math.max(1,sbm))); }
+    if(Math.abs(gain-1)>0.01){ for(let i=0;i<sb.length;i+=4){ sb[i]=sb[i]*gain; sb[i+1]=sb[i+1]*gain; sb[i+2]=sb[i+2]*gain; } for(let i=0;i<Lb.length;i++) Lb[i]=Math.min(255,Lb[i]*gain); }
+    // weight: where one photo is clearly brighter than the other (shine), trust the darker one; otherwise average
+    const wa=new Float32Array(w*h);
+    for(let i=0;i<wa.length;i++){ if(!has[i]){ wa[i]=1; continue; } const d=La[i]-Lb[i]; wa[i]=1/(1+Math.exp(d/9)); }
+    const ws=boxBlur(boxBlur(wa,w,h,3),w,h,3);
+    // keep sharp choice inside strong shine, smooth elsewhere to avoid seams
+    const out=new Uint8ClampedArray(ad.length);
+    for(let i=0,k=0;i<ws.length;i++,k+=4){ const t=Math.min(ws[i],wa[i]+0.5)*0.5+ws[i]*0.5, u=Math.max(0,Math.min(1,t));
+      out[k]=ad[k]*u+sb[k]*(1-u); out[k+1]=ad[k+1]*u+sb[k+1]*(1-u); out[k+2]=ad[k+2]*u+sb[k+2]*(1-u); out[k+3]=255; }
+    return { data:out, width:w, height:h, offset:[dx,dy] };
+  }
+  // how much of the card is covered by shine (broader than glareMask: bright, washed-out areas, not only clipped pixels)
+  function shineFraction(img){
+    const d=img.data, w=img.width, h=img.height, mx=Math.round(w*0.05), my=Math.round(h*0.04); let n=0, t=0;
+    for(let y=my;y<h-my;y+=2) for(let x=mx;x<w-mx;x+=2){ const k=(y*w+x)*4, lo=Math.min(d[k],d[k+1],d[k+2]), hi=Math.max(d[k],d[k+1],d[k+2]); t++; if(lo>215 && hi-lo<40) n++; }
+    return n/t;
+  }
+
+  // ---- Single-photo reflection removal ----
+  // A reflection acts like a coloured veil:  seen = true*(1-a) + V*a  (V = colour of the reflected light).
+  // boxes: areas Gemini marked as reflections, [ymin,xmin,ymax,xmax] on a 0–1000 scale. Only those areas are touched,
+  // so printed white areas are never changed. Inside them we estimate the veil strength a(x) from how much the local
+  // darkest colour is raised versus the card around it, and reverse it. Solid-white cores are filled from surroundings.
+  function deglare(img, boxes){
+    const W=img.width, H=img.height, d=img.data;
+    const copy=()=>({ data:new Uint8ClampedArray(d), width:W, height:H, removed:0 });
+    if(!boxes || !boxes.length) return copy();
+    const f=4, w=Math.floor(W/f), h=Math.floor(H/f);
+    // soft mask from the boxes (expanded a little, feathered)
+    const M=new Float32Array(w*h);
+    for(const bx of boxes){ if(!Array.isArray(bx)||bx.length<4) continue;
+      let [y0,x0,y1,x1]=bx.map(Number); if(!(y1>y0&&x1>x0)) continue;
+      const py=(y1-y0)*0.12+15, px=(x1-x0)*0.12+15; y0=Math.max(0,y0-py); y1=Math.min(1000,y1+py); x0=Math.max(0,x0-px); x1=Math.min(1000,x1+px);
+      const Y0=Math.floor(y0/1000*h), Y1=Math.ceil(y1/1000*h), X0=Math.floor(x0/1000*w), X1=Math.ceil(x1/1000*w), fe=Math.max(3,Math.round(Math.min(Y1-Y0,X1-X0)*0.15));
+      for(let y=Y0;y<Y1;y++) for(let x=X0;x<X1;x++){ const e=Math.min(y-Y0,Y1-1-y,x-X0,X1-1-x); M[y*w+x]=Math.max(M[y*w+x], Math.min(1,(e+1)/fe)); } }
+    let anyM=false; for(let i=0;i<M.length;i++) if(M[i]>0){ anyM=true; break; } if(!anyM) return copy();
+    // low-res dark channel, then local minimum (darkest colour nearby)
+    const dark=new Float32Array(w*h);
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){ let mn=255; for(let j=0;j<f;j++) for(let i=0;i<f;i++){ const k=((y*f+j)*W+x*f+i)*4; mn=Math.min(mn,d[k],d[k+1],d[k+2]); } dark[y*w+x]=mn; }
+    const minF=(src,r)=>{ const t=new Float32Array(w*h), o=new Float32Array(w*h);
+      for(let y=0;y<h;y++) for(let x=0;x<w;x++){ let m=255; for(let k=-r;k<=r;k++){ const X=Math.min(w-1,Math.max(0,x+k)); m=Math.min(m,src[y*w+X]); } t[y*w+x]=m; }
+      for(let y=0;y<h;y++) for(let x=0;x<w;x++){ let m=255; for(let k=-r;k<=r;k++){ const Y=Math.min(h-1,Math.max(0,y+k)); m=Math.min(m,t[Y*w+x]); } o[y*w+x]=m; } return o; };
+    const D=minF(dark,3);
+    // reflected-light colour V: average of the brightest pixels inside the marked areas
+    const lum=[]; for(let y=0;y<H;y+=2) for(let x=0;x<W;x+=2){ const m=M[Math.min(h-1,(y/f)|0)*w+Math.min(w-1,(x/f)|0)]; if(m<0.5) continue; const k=(y*W+x)*4; lum.push([d[k]+d[k+1]+d[k+2],k]); }
+    if(lum.length<50) return copy();
+    lum.sort((p,q)=>q[0]-p[0]); const top=lum.slice(0,Math.max(20,Math.floor(lum.length*0.02)));
+    const V=[0,0,0]; for(const [,k] of top){ V[0]+=d[k]; V[1]+=d[k+1]; V[2]+=d[k+2]; } for(let c=0;c<3;c++) V[c]=Math.max(170,V[c]/top.length);
+    const Vmin=Math.min(V[0],V[1],V[2]);
+    // reference darkest colour without the veil: diffuse from outside the marked areas inwards
+    const ref=new Float32Array(D), known=new Uint8Array(w*h); let todo=[];
+    for(let i=0;i<w*h;i++){ if(M[i]>0) todo.push(i); else known[i]=1; }
+    for(let guard=0; todo.length && guard<600; guard++){ const next=[], upd=[];
+      for(const p of todo){ const x=p%w, y=(p-x)/w; let s=0,n=0; for(let j=-1;j<=1;j++) for(let i=-1;i<=1;i++){ if(!i&&!j) continue; const X=x+i,Y=y+j; if(X<0||Y<0||X>=w||Y>=h) continue; const q=Y*w+X; if(known[q]){ s+=ref[q]; n++; } }
+        if(n>=2) upd.push([p,s/n]); else next.push(p); }
+      if(!upd.length) break; for(const [p,v] of upd){ ref[p]=v; known[p]=1; } todo=next; }
+    let R=ref; for(let it=0;it<6;it++){ const o=new Float32Array(R); for(let y=1;y<h-1;y++) for(let x=1;x<w-1;x++){ const i=y*w+x; if(M[i]>0) o[i]=(R[i]*2+R[i-1]+R[i+1]+R[i-w]+R[i+w])/6; } R=o; }
+    // veil strength, limited to the marked areas
+    let A=new Float32Array(w*h);
+    for(let i=0;i<w*h;i++){ if(M[i]<=0) continue; const r=Math.min(R[i],Vmin-15); A[i]=M[i]*Math.max(0,Math.min(0.985,(D[i]-r)/Math.max(10,Vmin-r))); }
+    for(let it=0;it<3;it++){ const o=new Float32Array(A); for(let y=1;y<h-1;y++) for(let x=1;x<w-1;x++){ const i=y*w+x; o[i]=(A[i]*4+A[i-1]+A[i+1]+A[i-w]+A[i+w])/8; } A=o; }
+    // undo the veil at full resolution
+    const out=new Uint8ClampedArray(d.length), solid=new Uint8Array(W*H); let removed=0;
+    for(let Y=0;Y<H;Y++){ const fy=Math.min(h-1.001,Math.max(0,(Y+0.5)/f-0.5)), y0=Math.floor(fy), ty=fy-y0;
+      for(let X=0;X<W;X++){ const fx=Math.min(w-1.001,Math.max(0,(X+0.5)/f-0.5)), x0=Math.floor(fx), tx=fx-x0, i=y0*w+x0;
+        const a=(A[i]*(1-tx)+A[i+1]*tx)*(1-ty)+(A[i+w]*(1-tx)+A[i+w+1]*tx)*ty, k=(Y*W+X)*4;
+        if(a<0.02){ out[k]=d[k]; out[k+1]=d[k+1]; out[k+2]=d[k+2]; out[k+3]=255; continue; }
+        removed++; const inv=1/Math.max(0.08,1-a);
+        for(let c=0;c<3;c++) out[k+c]=(d[k+c]-V[c]*a)*inv;
+        out[k+3]=255; if(a>0.86) solid[Y*W+X]=1; } }
+    let ns=0; for(let i=0;i<solid.length;i++) ns+=solid[i];
+    const res={ data:out, width:W, height:H, removed:removed/(W*H) };
+    if(ns) inpaint(res, solid);
+    return res;
+  }
   function isConvex(q){
     let sign=0; for(let i=0;i<4;i++){ const a=q[i],b=q[(i+1)%4],c=q[(i+2)%4];
       const z=(b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0]); if(Math.abs(z)<1e-6) return false;
@@ -523,7 +636,7 @@ const IP = (() => {
           (src[k-w*4-4+c]+src[k-w*4+4+c]+src[k+w*4-4+c]+src[k+w*4+4+c])*0.5)/10;
         d[k+c]=src[k+c]+(src[k+c]-bl)*amount; } }
   }
-  return {warp,refine,refineRobust,isConvex,blurScore,glareMask,inpaint,levels,sharpen,downscale};
+  return {warp,refine,refineRobust,fuse,shineFraction,deglare,isConvex,blurScore,glareMask,inpaint,levels,sharpen,downscale};
 })();
 
 /* Find a rectangular card on a plain background. Returns quad [tl,tr,br,bl] in img pixels (portrait order) or null. */
@@ -729,13 +842,17 @@ function filtered(){
   return list.sort(by[state.sort]);
 }
 function render(){
-  const total = state.cards.reduce((s,c)=>s+(c.price_usd||0),0), n = state.cards.length;
+  const total = state.cards.reduce((s,c)=>s+(c.price_usd||0)*(c.copies||1),0), n = state.cards.reduce((s,c)=>s+(c.copies||1),0);
   $("total").textContent = sgd(total);
   $("count").textContent = n ? `Collection value across ${n} card${n>1?"s":""}` : "No cards yet";
-  const review = state.cards.filter(c=>c.needs_review).length;
-  $("pending").hidden = !(state.owner && review);
-  if(state.owner && review){ const pb=$("pending"); pb.textContent=`${review} card${review>1?"s need":" needs"} details. `;
-    const b=document.createElement("button"); b.className="chip-btn"; b.type="button"; b.textContent=review>1?"Read them again":"Read it again"; b.onclick=readAllAgain; pb.appendChild(b);
+  const review = state.cards.filter(c=>c.needs_review).length, dups = dupGroups();
+  $("pending").hidden = !(state.owner && (review || dups.length));
+  $("pending").textContent = "";
+  if(state.owner && dups.length){ const pb=$("pending"); const extra=dups.reduce((s,g)=>s+g.length-1,0);
+    const line=document.createElement("div"); line.textContent=`${extra} duplicate card${extra>1?"s":""} found (${dups.map(g=>g[0].name||"card").slice(0,3).join(", ")}${dups.length>3?"…":""}). `;
+    const b=document.createElement("button"); b.className="chip-btn"; b.type="button"; b.textContent="Merge duplicates"; b.onclick=mergeDuplicates; line.appendChild(b); pb.appendChild(line); }
+  if(state.owner && review){ const pb=$("pending"); const line=document.createElement("div"); if(dups.length) line.style.marginTop="8px"; line.textContent=`${review} card${review>1?"s need":" needs"} details. `; pb.appendChild(line);
+    const b=document.createElement("button"); b.className="chip-btn"; b.type="button"; b.textContent=review>1?"Read them again":"Read it again"; b.onclick=readAllAgain; line.appendChild(b);
     if(state.lastError){ const e=document.createElement("div"); e.className="err-line"; e.textContent="Last problem: "+state.lastError; pb.appendChild(e); } }
   const g = $("grid"); g.textContent = "";
   const list = filtered();
@@ -748,6 +865,7 @@ function render(){
     const m=document.createElement("div"); m.className="meta";
     const nm=document.createElement("p"); nm.className="name"; nm.textContent=c.name||"New card";
     const nu=document.createElement("div"); nu.className="nums"; nu.textContent=c.number?`Card ${c.number}`:"";
+    if((c.copies||1)>1){ const cb=document.createElement("span"); cb.className="copies-badge"; cb.textContent=`×${c.copies}`; sl.appendChild(cb); }
     const pr=document.createElement("span");
     if(c.price_usd!=null){ pr.className="price"; pr.textContent=sgd(c.price_usd); }
     else { pr.className="price none"; pr.textContent = c.needs_review ? "Needs details" : "No price found"; }
@@ -783,7 +901,8 @@ function showViewerData(id){
   const c=state.cards.find(x=>x.id===id); if(!c){ closeViewer(); return; }
   $("vImg").src=imgUrl(c,false); $("vImg").alt=c.name||"Card";
   $("vName").textContent=c.name||"New card";
-  $("vNums").textContent=[c.number?`Card ${c.number}`:"", c.set_name||""].filter(Boolean).join("   ");
+  $("vNums").textContent=[c.number?`Card ${c.number}`:"", c.set_name||"", (!state.owner && (c.copies||1)>1)?`×${c.copies} copies`:""].filter(Boolean).join("   ");
+  $("vCopies").hidden=!state.owner; $("cNum").textContent=`${c.copies||1} cop${(c.copies||1)===1?"y":"ies"}`; $("cMinus").disabled=(c.copies||1)<=1;
   const vp=$("vPrice"); vp.textContent="";
   const sp=document.createElement("span");
   if(c.price_usd!=null){ sp.className="price"; sp.textContent=`${sgd(c.price_usd)}  (US$${Number(c.price_usd).toFixed(2)})`; }
@@ -796,6 +915,9 @@ function showViewerData(id){
 function openViewer(id){ state.viewing=id; z.s=1;z.x=0;z.y=0; applyZ(); showViewerData(id); $("viewer").classList.add("open"); document.body.style.overflow="hidden"; $("vClose").focus(); }
 function closeViewer(){ $("viewer").classList.remove("open"); document.body.style.overflow=""; state.viewing=null; }
 $("vClose").onclick=closeViewer;
+async function setCopies(delta){ const c=state.cards.find(x=>x.id===state.viewing); if(!c) return; const n=Math.max(1,(c.copies||1)+delta);
+  try{ const d=await api(`/api/cards/${c.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({copies:n})}); upsert(d.card); showViewerData(c.id); }catch(e){ toast(e.message); } }
+$("cMinus").onclick=()=>setCopies(-1); $("cPlus").onclick=()=>setCopies(1);
 
 /* ---------- owner: edit & delete ---------- */
 function openSheet(id){ $(id).classList.add("open"); } function closeSheet(id){ $(id).classList.remove("open"); }
@@ -814,9 +936,14 @@ $("saveBtn").onclick=async()=>{
   }catch(e){ $("addStatus").className="status err"; $("addStatus").textContent=e.message; }
   finally{ btn.disabled=false; }
 };
-$("vDel").onclick=()=>{ const c=state.cards.find(x=>x.id===state.viewing); if(!c) return; $("delText").textContent=`${c.name||"This card"}${c.number?" #"+c.number:""} will be removed from the binder for good.`; openSheet("delSheet"); };
-$("cancelDel").onclick=()=>closeSheet("delSheet");
-$("confirmDel").onclick=async()=>{ const id=state.viewing; try{ await api(`/api/cards/${id}`,{method:"DELETE"}); state.cards=state.cards.filter(c=>c.id!==id); closeSheet("delSheet"); closeViewer(); render(); toast("Card deleted"); }catch(e){ toast(e.message); } };
+function confirmBox(title, text, okLabel, cancelLabel){
+  return new Promise(res=>{ $("delTitle").textContent=title; $("delText").textContent=text; $("confirmDel").textContent=okLabel; $("cancelDel").textContent=cancelLabel||"Cancel";
+    $("confirmDel").onclick=()=>{ closeSheet("delSheet"); res(true); }; $("cancelDel").onclick=()=>{ closeSheet("delSheet"); res(false); }; openSheet("delSheet"); });
+}
+$("vDel").onclick=async()=>{ const c=state.cards.find(x=>x.id===state.viewing); if(!c) return;
+  const ok=await confirmBox("Delete this card?", `${c.name||"This card"}${c.number?" #"+c.number:""}${(c.copies||1)>1?` (all ${c.copies} copies)`:""} will be removed from the binder for good.`, "Delete card", "Keep card");
+  if(!ok) return; const id=c.id;
+  try{ await api(`/api/cards/${id}`,{method:"DELETE"}); state.cards=state.cards.filter(x=>x.id!==id); closeViewer(); render(); toast("Card deleted"); }catch(e){ toast(e.message); } };
 function upsert(card){ const i=state.cards.findIndex(c=>c.id===card.id); if(i>=0) state.cards[i]=card; else state.cards.unshift(card); render(); }
 document.addEventListener("keydown",e=>{ if(e.key!=="Escape") return; if($("cropView").classList.contains("open")){ state.batchCancel=true; closeCrop(); return; } for(const id of ["delSheet","addSheet"]) if($(id).classList.contains("open")){ closeSheet(id); return; } if($("viewer").classList.contains("open")) closeViewer(); });
 
@@ -848,7 +975,7 @@ function cropStatus(t,err){ const el=$("cropStatus"); el.textContent=t; el.style
 function busy(t){ const el=$("cropStatus"); el.style.color=""; el.innerHTML='<span class="spin" aria-hidden="true"></span>'; el.append(t); }
 function openCrop(title){ $("cropTitle").textContent=title||"Crop card"; $("cropView").classList.add("open"); document.body.style.overflow="hidden"; $("qbox").classList.remove("open"); }
 function closeCrop(){ crop.token++; $("cropView").classList.remove("open"); if(!$("viewer").classList.contains("open")) document.body.style.overflow=""; }
-$("cropClose").onclick=()=>{ state.batchCancel=true; closeCrop(); };
+$("cropClose").onclick=()=>{ state.batchCancel=true; state.fuseBase=null; state.fuseCount=0; closeCrop(); };
 $("cropRetake").onclick=()=>pickPhoto(state.lastSource, !!crop.replaceFor);
 function defaultQuad(w,h){ let ch=h*0.8, cw=ch*63/88; if(cw>w*0.8){ cw=w*0.8; ch=cw*88/63; } const x=(w-cw)/2, y=(h-ch)/2; return [[x,y],[x+cw,y],[x+cw,y+ch],[x,y+ch]]; }
 function layoutCrop(){
@@ -885,19 +1012,21 @@ function detect(px){
   try{ const a=findCardAxis(px); if(a) return a.quad; }catch{}   // cards in toploaders / sleeves
   return null;
 }
-function cleanUp(px, quad){
+// Straighten the card and check the photo. Returns the raw image (for combining) plus any problems.
+function warpCheck(px, quad){
   const mx=quad.reduce((s,p)=>s+p[0],0)/4, my=quad.reduce((s,p)=>s+p[1],0)/4;
-  const out=IP.warp(px, quad.map(p=>[mx+(p[0]-mx)*0.994, my+(p[1]-my)*0.994]), CARD_W, CARD_H);
-  const blur=IP.blurScore(out);
+  const raw=IP.warp(px, quad.map(p=>[mx+(p[0]-mx)*0.994, my+(p[1]-my)*0.994]), CARD_W, CARD_H);
   const cardPx=(Math.hypot(quad[3][0]-quad[0][0],quad[3][1]-quad[0][1])+Math.hypot(quad[2][0]-quad[1][0],quad[2][1]-quad[1][1]))/2;
-  const gl=IP.glareMask(out), issues=[];
-  if(blur>0.48) issues.push(["Photo too blurry","This photo is too blurry to see the card clearly. Hold your phone steady, tap the card on screen to focus, and take it again."]);
-  else if(cardPx<650) issues.push(["Card too small","The card is too small in this photo. Move closer so the card fills most of the frame."]);
-  if(gl.frac>0.05) issues.push(["Light reflection on the card","A strong reflection covers part of the card. Tilt the card slightly or move away from overhead lights, then retake."]);
-  if(gl.frac>0 && gl.frac<=0.08) IP.inpaint(out, gl.mask);
+  return { raw, blurry: IP.blurScore(raw)>0.48, small: cardPx<650, shiny: isShiny(raw) };
+}
+function isShiny(img){ return IP.shineFraction(img) > 0.035 || IP.glareMask(img).frac > 0.012; }
+// Final touch-up: fill tiny glints, balance brightness, sharpen.
+function finalize(raw){
+  const out={ data:new Uint8ClampedArray(raw.data), width:raw.width, height:raw.height };
+  const gl=IP.glareMask(out); if(gl.frac>0 && gl.frac<=0.08) IP.inpaint(out, gl.mask);
   IP.levels(out); IP.sharpen(out,0.45);
-  const c=document.createElement("canvas"); c.width=CARD_W; c.height=CARD_H; c.getContext("2d").putImageData(new ImageData(out.data,CARD_W,CARD_H),0,0);
-  return { canvas:c, issues };
+  const c=document.createElement("canvas"); c.width=out.width; c.height=out.height; c.getContext("2d").putImageData(new ImageData(out.data,out.width,out.height),0,0);
+  return c;
 }
 function rotate180(canvas){ const c=document.createElement("canvas"); c.width=canvas.width; c.height=canvas.height; const g=c.getContext("2d"); g.translate(c.width,c.height); g.rotate(Math.PI); g.drawImage(canvas,0,0); return c; }
 
@@ -925,16 +1054,42 @@ async function identify(canvas){
   return await api("/api/identify",{ method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(body) });
 }
 
+/* ---------- duplicates ---------- */
+const normCode=s=>String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"").replace(/^swsh(?=\d)/,"s");
+const normNum=s=>{ const m=String(s||"").match(/^([a-z]*)0*(\d+)/i); return m?(m[1].toLowerCase()+m[2]):String(s||"").toLowerCase(); };
+function cardKey(c){ if(c.product_id) return "p"+c.product_id; if(c.number && c.set_code) return "s"+normCode(c.set_code)+"#"+normNum(c.number)+"/"+(c.lang||""); return null; }
+function dupGroups(){ const m=new Map(); for(const c of state.cards){ const k=cardKey(c); if(!k) continue; if(!m.has(k)) m.set(k,[]); m.get(k).push(c); } return [...m.values()].filter(g=>g.length>1); }
+function findDup(id){
+  const pid=id.match&&id.match.product_id;
+  return state.cards.find(c=>(pid && c.product_id===pid) || (!pid && id.number && id.setCode && c.number && c.set_code && normNum(c.number)===normNum(id.number) && normCode(c.set_code)===normCode(id.setCode) && (!id.lang||!c.lang||id.lang===c.lang)));
+}
+async function mergeDuplicates(){
+  const groups=dupGroups(); if(!groups.length) return;
+  const extra=groups.reduce((s,g)=>s+g.length-1,0);
+  if(!(await confirmBox("Merge duplicates?", `${extra} duplicate card${extra>1?"s":""} will be combined into ${groups.length} card${groups.length>1?"s":""} with a copies count. The first photo of each is kept.`, "Merge", "Cancel"))) return;
+  for(const g of groups){
+    g.sort((a,b)=>(a.added_at||"").localeCompare(b.added_at||""));
+    const keep=g[0], copies=g.reduce((s,c)=>s+(c.copies||1),0);
+    try{ const d=await api(`/api/cards/${keep.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({copies})}); upsert(d.card);
+      for(const c of g.slice(1)){ await api(`/api/cards/${c.id}`,{method:"DELETE"}); state.cards=state.cards.filter(x=>x.id!==c.id); } }
+    catch(e){ toast(e.message); }
+  }
+  render(); toast("Duplicates merged");
+}
+
 /* ---------- owner: read a saved card again ---------- */
 async function canvasFromCard(c){
   const r=await fetch(imgUrl(c,false)); if(!r.ok) throw new Error("Couldn't load the photo.");
   const bmp=await createImageBitmap(await r.blob()); const cv=document.createElement("canvas"); cv.width=bmp.width; cv.height=bmp.height; cv.getContext("2d").drawImage(bmp,0,0); return cv;
 }
-async function readAgain(c){
+async function readAgain(c){ c={...c};
   let canvas=await canvasFromCard(c);
   let id; try{ id=await identify(canvas); }catch(e){ throw new Error(e.message); }
   if(id.rotation===180){ canvas=rotate180(canvas); id=await identify(canvas); }
   if(id.aiError) state.lastError=id.aiError;
+  if(id.glare && id.glare.length){   // clean reflections on the saved photo too
+    try{ const px=getPixels(canvas), cl=IP.deglare(px, id.glare); if(cl.removed>0){ const cv=document.createElement("canvas"); cv.width=cl.width; cv.height=cl.height; cv.getContext("2d").putImageData(new ImageData(cl.data,cl.width,cl.height),0,0); const card=await saveCard(cv,null,c.id); upsert(card); c=card; } }catch{}
+  }
   if(!id.number && !id.name) throw new Error(id.aiError || "Couldn't read the name or number on this photo.");
   const d=await api(`/api/cards/${c.id}`,{ method:"PATCH", headers:{"content-type":"application/json"}, body:JSON.stringify({
     name:(id.match&&id.match.name)||id.name||"", number:id.number||"", total:id.total||"", setCode:id.setCode||"", lang:id.lang||"", relookup:true }) });
@@ -947,7 +1102,7 @@ $("vRead").onclick=async()=>{ const c=state.cards.find(x=>x.id===state.viewing);
   finally{ b.disabled=false; } };
 async function readAllAgain(){
   const list=state.cards.filter(c=>c.needs_review); let ok=0, i=0;
-  for(const c of list){ i++; $("pending").firstChild.textContent=`Reading ${i} of ${list.length}… `;
+  for(const c of list){ i++; toast(`Reading ${i} of ${list.length}…`);
     try{ await readAgain(c); ok++; }catch(e){ state.lastError=e.message; } }
   toast(`Read ${ok} of ${list.length} card${list.length===1?"":"s"}`); render();
 }
@@ -980,30 +1135,51 @@ $("cropOk").onclick=async()=>{
   if(!crop.src||!IP.isConvex(crop.quad)){ cropStatus("Drag the corners so the outline forms the card's shape.", true); return; }
   $("cropOk").disabled=true; busy("Cleaning up the photo…"); await frame();
   try{
-    const res=cleanUp(getPixels(crop.src), crop.quad);
-    if(res.issues.length){ showProblem(res.issues[0][0], res.issues.map(i=>i[1]), "Use anyway", ()=>finish(res.canvas)); return; }
-    await finish(res.canvas);
-  }catch{ cropStatus("Couldn't process this photo. Retake it.", true); }
+    const r=warpCheck(getPixels(crop.src), crop.quad);
+    if(r.blurry){ showProblem("Photo too blurry",["This photo is too blurry to see the card clearly. Hold the phone steady, tap the card on screen to focus, and take it again."],"Use anyway",()=>afterCheck(r)); return; }
+    if(r.small){ showProblem("Card too small",["The card is too small in this photo. Move closer so the card fills most of the frame."],"Use anyway",()=>afterCheck(r)); return; }
+    await afterCheck(r);
+  }catch(e){ cropStatus("Couldn't process this photo. Retake it.", true); }
   finally{ $("cropOk").disabled=false; }
 };
-async function finish(canvas){
+async function afterCheck(r){ await finish(r.raw); }
+function rotateRaw180(raw){ const d=raw.data, o=new Uint8ClampedArray(d.length), n=d.length/4; for(let i=0;i<n;i++){ const j=(n-1-i)*4, k=i*4; o[k]=d[j]; o[k+1]=d[j+1]; o[k+2]=d[j+2]; o[k+3]=255; } return { data:o, width:raw.width, height:raw.height }; }
+async function finish(raw){
   const token=crop.token;
   try{
-    if(crop.replaceFor){ busy("Saving new photo…"); const card=await saveCard(canvas,null,crop.replaceFor); upsert(card); closeCrop(); toast("Photo replaced"); if(state.viewing) showViewerData(state.viewing); return; }
-    const r=await identifyAndSave(canvas, token);
-    if(r && r.card && token===crop.token){ closeCrop(); toast(r.card.needs_review ? ("Saved, but couldn't read the card" + (state.lastError ? ": " + state.lastError : ".")) : `Saved ${r.card.name} #${r.card.number}`); render(); }
-  }catch(e){ if(token===crop.token) showProblem("Saving failed",[e.message||"Check your connection and try again."], null, null, "Try again", ()=>finish(canvas)); }
+    if(crop.replaceFor){
+      busy("Removing reflections…"); let canvas=finalize(raw);
+      try{ const id=await identify(canvas); if(id.glare && id.glare.length) canvas=finalize(IP.deglare(raw,id.glare)); }catch{}
+      busy("Saving new photo…"); const card=await saveCard(canvas,null,crop.replaceFor); upsert(card); closeCrop(); toast("Photo replaced"); if(state.viewing) showViewerData(state.viewing); return; }
+    const r=await identifyAndSave(raw, token, false);
+    if(!r || token!==crop.token) return;
+    if(r.skipped){ closeCrop(); toast("Not added. It's already in the binder."); return; }
+    if(r.addedCopy){ closeCrop(); toast(`Now ${r.card.copies} copies of ${r.card.name}`); return; }
+    if(r.card){ closeCrop(); toast(r.card.needs_review ? ("Saved, but couldn't read the card" + (state.lastError ? ": " + state.lastError : ".")) : `Saved ${r.card.name} #${r.card.number}${r.deglared?" (reflection removed)":""}`); render(); }
+  }catch(e){ if(token===crop.token) showProblem("Saving failed",[e.message||"Check your connection and try again."], null, null, "Try again", ()=>finish(raw)); }
 }
-async function identifyAndSave(canvas, token){
+async function identifyAndSave(raw, token, batch){
   busy("Reading the name and number…");
-  let id={}; try{ id=await identify(canvas); }catch(e){ id={ __error:e.message }; }
+  let canvas=finalize(raw), id={};
+  try{ id=await identify(canvas); }catch(e){ id={ __error:e.message }; }
   if(token!==crop.token) return null;
-  if(id.rotation===180){ canvas=rotate180(canvas); busy("Card was upside down. Reading again…"); try{ id=await identify(canvas); }catch{ id={}; } }
+  if(id.rotation===180){ raw=rotateRaw180(raw); canvas=finalize(raw); busy("Card was upside down. Reading again…"); try{ id=await identify(canvas); }catch{ id={}; } }
+  let deglared=false;
+  if(id.glare && id.glare.length){ busy("Removing reflections…"); await frame(); try{ canvas=finalize(IP.deglare(raw,id.glare)); deglared=true; }catch{} }
   if(id.isCard===false) throw new Error("That doesn't look like a Pokémon card. Retake with the front facing up.");
   state.lastError = id.aiError || (id.__error || null);
+  const dup=findDup(id);
+  if(dup){
+    if(batch) return { dup };
+    return await new Promise(resolve=>{
+      showProblem("Already in your binder", [`You already have ${dup.name||"this card"}${dup.number?" #"+dup.number:""}${(dup.copies||1)>1?` (${dup.copies} copies)`:""}.`, "Add this as another copy, or skip it?"],
+        "Don't add", ()=>resolve({ skipped:true }),
+        "Add another copy", async()=>{ busy("Updating…"); try{ const d=await api(`/api/cards/${dup.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({copies:(dup.copies||1)+1})}); upsert(d.card); resolve({ card:d.card, addedCopy:true }); }catch(e){ resolve(null); toast(e.message); } });
+    });
+  }
   busy(id.match ? `Saving ${id.match.name}…` : "Saving…");
   const data={ name:(id.match&&id.match.name)||id.name||"", number:id.number||"", total:id.total||"", setCode:id.setCode||"", lang:id.lang||"", match:id.match||null };
-  const card=await saveCard(canvas,data,null); upsert(card); return { card };
+  const card=await saveCard(canvas,data,null); upsert(card); return { card, deglared };
 }
 async function saveCard(canvas, data, replaceId){
   const fd=new FormData();
@@ -1014,7 +1190,7 @@ async function saveCard(canvas, data, replaceId){
   const d=await api("/api/cards",{method:"POST",body:fd}); return d.card;
 }
 async function runBatch(files){
-  state.batchCancel=false; const saved=[], review=[], problems=[];
+  state.batchCancel=false; const saved=[], review=[], problems=[], dupes=[], shiny=[];
   openCrop(""); $("cropOk").hidden=true;
   for(let i=0;i<files.length;i++){
     if(state.batchCancel) break;
@@ -1025,17 +1201,22 @@ async function runBatch(files){
     const q=detect(getPixels(crop.src));
     if(!q){ problems.push(`${label}: card not found`); continue; }
     crop.quad=q; drawQuad(); busy("Cleaning up the photo…"); await frame();
-    const res=cleanUp(getPixels(crop.src), q);
-    if(res.issues.length && res.issues[0][0]==="Photo too blurry"){ problems.push(`${label}: photo too blurry`); continue; }
-    try{ const r=await identifyAndSave(res.canvas, token); if(!r) continue; (r.card.needs_review?review:saved).push(r.card); }
+    const chk=warpCheck(getPixels(crop.src), q);
+    if(chk.blurry){ problems.push(`${label}: photo too blurry`); continue; }
+    try{ const r=await identifyAndSave(chk.raw, token, true); if(!r) continue;
+      if(r.dup){ dupes.push(`${r.dup.name||label}${r.dup.number?" #"+r.dup.number:""}`); continue; }
+      (r.card.needs_review?review:saved).push(r.card); if(r.deglared) shiny.push(r.card.name||label); }
     catch(e){ problems.push(`${label}: ${e.message}`); }
   }
   if(state.batchCancel){ toast(`Stopped. Saved ${saved.length+review.length} card${saved.length+review.length===1?"":"s"}.`); return; }
   $("cropTitle").textContent="Batch finished";
   const lines=[`Saved ${saved.length+review.length} of ${files.length} photo${files.length===1?"":"s"}.`];
   if(review.length) lines.push(`${review.length} saved card${review.length===1?" needs":"s need"} the name or number added.`);
+  if(dupes.length) lines.push(`Skipped ${dupes.length} already in the binder: ${dupes.slice(0,6).join(", ")}${dupes.length>6?"…":""}.`);
+  if(shiny.length) lines.push(`Removed reflections on ${shiny.length} card${shiny.length===1?"":"s"}.`);
   if(problems.length){ lines.push(`${problems.length} need${problems.length===1?"s":""} a retake:`); problems.slice(0,12).forEach(p=>lines.push("• "+p)); }
-  showProblem(problems.length?"Some photos need a retake":"All cards saved", lines, null, null, "Done", closeCrop);
+  const title = problems.length ? "Some photos need a retake" : (saved.length+review.length ? "All cards saved" : "Nothing new to add");
+  showProblem(title, lines, null, null, "Done", closeCrop);
 }
 
 load();

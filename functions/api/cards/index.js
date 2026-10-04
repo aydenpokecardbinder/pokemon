@@ -1,6 +1,6 @@
 import { json, isOwner, ensureSchema, getMeta, refreshSome, lookupCard } from "../../../lib/server.js";
 
-const COLS = "id,name,number,total,set_name,set_code,lang,product_id,tcg_url,price_usd,price_updated,needs_review,added_at,img_ver";
+const COLS = "id,name,number,total,set_name,set_code,lang,product_id,tcg_url,price_usd,price_updated,needs_review,added_at,img_ver,copies";
 
 // Public: list cards (no images). Also kicks off the daily background price refresh when due.
 export async function onRequestGet({ env, waitUntil }) {

@@ -1,5 +1,5 @@
 import { json, isOwner, ensureSchema, lookupCard } from "../../../lib/server.js";
-const COLS = "id,name,number,total,set_name,set_code,lang,product_id,tcg_url,price_usd,price_updated,needs_review,added_at,img_ver";
+const COLS = "id,name,number,total,set_name,set_code,lang,product_id,tcg_url,price_usd,price_updated,needs_review,added_at,img_ver,copies";
 
 // Owner: edit details (JSON) or replace the photo (multipart with image/thumb).
 export async function onRequestPatch({ request, env, params }) {
@@ -18,6 +18,11 @@ export async function onRequestPatch({ request, env, params }) {
     const name = d.name != null ? String(d.name).trim() : cur.name, number = d.number != null ? String(d.number).trim() : cur.number;
     const total = d.total != null ? String(d.total).trim() : cur.total, setCode = d.setCode != null ? String(d.setCode).trim() : cur.set_code;
     const lang = d.lang != null ? String(d.lang) : cur.lang;
+    if (d.copies != null) {   // copies-only change: no lookup needed
+      const n = Math.max(1, Math.min(999, parseInt(d.copies, 10) || 1));
+      await env.DB.prepare("UPDATE cards SET copies=? WHERE id=?").bind(n, params.id).run();
+      if (Object.keys(d).length === 1) { const card = await env.DB.prepare(`SELECT ${COLS} FROM cards WHERE id=?`).bind(params.id).first(); return json({ card }); }
+    }
     let m = null;
     if (number !== cur.number || setCode !== cur.set_code || total !== cur.total || lang !== cur.lang || d.relookup) {
       try { m = await lookupCard(env, { lang, setCode, number, total }); } catch {}

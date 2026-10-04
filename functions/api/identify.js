@@ -13,6 +13,7 @@ export async function onRequestPost({ request, env }) {
   const info = read && read.isCard !== false ? {
     name: read.name || "", printedName: read.printedName || "", number: String(read.number || ""), total: String(read.total || ""),
     setCode: read.setCode || "", lang: read.language || "", rotation: Number(read.rotation) || 0,
+    glare: Array.isArray(read.glare) ? read.glare.filter((b) => Array.isArray(b) && b.length === 4).slice(0, 12) : [],
   } : { name: h.name || "", number: String(h.number || ""), total: String(h.total || ""), setCode: h.setCode || "", lang: h.lang || "", rotation: 0 };
   if (read && read.isCard === false) return json({ isCard: false });
   let match = null;
