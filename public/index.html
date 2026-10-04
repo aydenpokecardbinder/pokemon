@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PokeCardBinder</title>
+<meta name="description" content="A Pokémon card collection with live prices in SGD.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🃏</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E9EDF5; --surface:#FFFFFF; --sleeve:#F7F9FD; --ink:#1C2541; --muted:#5A6482;
+  --line:#CDD4E4; --accent:#FFCB05; --accent-ink:#1C2541; --blue:#3B5BA9; --danger:#C93C3C;
+  --shadow:0 1px 0 rgba(28,37,65,.08), 0 8px 20px -12px rgba(28,37,65,.35);
+  --display:"Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body:"Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111827; --surface:#1A2236; --sleeve:#202A42; --ink:#E9EDF7; --muted:#9AA4BF;
+    --line:#2E3A57; --blue:#8FA9EC; --danger:#F07A7A;
+    --shadow:0 1px 0 rgba(0,0,0,.4), 0 10px 24px -14px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111827; --surface:#1A2236; --sleeve:#202A42; --ink:#E9EDF7; --muted:#9AA4BF;
+  --line:#2E3A57; --blue:#8FA9EC; --danger:#F07A7A;
+  --shadow:0 1px 0 rgba(0,0,0,.4), 0 10px 24px -14px rgba(0,0,0,.8);
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45;min-height:100vh}
+img{max-width:100%;display:block}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+
+/* Header */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.top-in{max-width:1200px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px}
+.brand{font-family:var(--display);font-weight:800;font-size:1.3rem;letter-spacing:-.02em;margin:0;white-space:nowrap;display:flex;align-items:center;gap:8px}
+.brand .ball{width:22px;height:22px;border-radius:50%;background:linear-gradient(var(--danger) 0 46%,var(--ink) 46% 54%,var(--surface) 54%);border:2px solid var(--ink);position:relative;flex:none}
+.brand .ball::after{content:"";position:absolute;inset:50% auto auto 50%;width:7px;height:7px;transform:translate(-50%,-50%);background:var(--surface);border:2px solid var(--ink);border-radius:50%}
+.search{margin-left:auto;position:relative;width:min(320px,100%)}
+.search input{width:100%;height:42px;border-radius:21px;border:1px solid var(--line);background:var(--surface);padding:0 14px 0 40px;font-size:16px}
+.search svg{position:absolute;left:13px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--muted);pointer-events:none}
+@media (max-width:520px){
+  .brand span.word{display:none}
+  .search{width:auto;flex:1}
+}
+
+/* Summary */
+main{max-width:1200px;margin:0 auto;padding:20px 16px 120px}
+.worth{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;margin-bottom:18px}
+.worth h2{font-family:var(--display);font-weight:800;font-size:clamp(2rem,7vw,3.4rem);line-height:1;letter-spacing:-.03em;margin:0}
+.worth p{margin:4px 0 0;color:var(--muted)}
+.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tools select,.chip-btn{height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);padding:0 10px}
+.who{font-size:.9rem;color:var(--muted)}
+#pending{margin:0 0 16px;color:var(--ink)}
+#pending b{font-weight:700}
+
+/* Grid */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:18px 14px}
+@media (max-width:380px){.grid{grid-template-columns:repeat(2,1fr);gap:14px 10px}}
+.card{background:none;border:0;padding:0;text-align:left;display:flex;flex-direction:column;gap:8px}
+.sleeve{position:relative;aspect-ratio:63/88;border-radius:12px;background:var(--sleeve);border:1px solid var(--line);box-shadow:var(--shadow);overflow:hidden;padding:5px}
+.sleeve img{width:100%;height:100%;object-fit:cover;border-radius:8px}
+.sleeve::after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.28) 45%,transparent 60%);pointer-events:none}
+.card:hover .sleeve{border-color:var(--blue)}
+.meta .name{font-family:var(--display);font-weight:700;font-size:1.02rem;line-height:1.2;margin:0}
+.meta .nums{color:var(--muted);font-size:.85rem;margin-top:2px}
+.price{display:inline-block;margin-top:5px;font-weight:700;background:var(--accent);color:var(--accent-ink);padding:1px 8px;border-radius:6px;font-size:.92rem}
+.price.none{background:transparent;color:var(--muted);padding:0;font-weight:400}
+
+.empty{border:2px dashed var(--line);border-radius:16px;padding:40px 20px;text-align:center;color:var(--muted)}
+.empty h3{font-family:var(--display);color:var(--ink);margin:0 0 6px;font-size:1.3rem}
+.note{padding:14px 16px;border-radius:12px;background:var(--surface);border:1px solid var(--line);color:var(--muted)}
+
+/* Scan button */
+.fab{position:fixed;right:max(18px,env(safe-area-inset-right,0px));bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:30;height:58px;padding:0 22px 0 18px;border-radius:29px;border:2px solid var(--ink);background:var(--accent);color:var(--accent-ink);font-family:var(--display);font-weight:800;font-size:1.05rem;display:flex;align-items:center;gap:10px;box-shadow:0 10px 24px -8px rgba(28,37,65,.55)}
+.fab svg{width:24px;height:24px}
+.fab-2{position:fixed;right:max(18px,env(safe-area-inset-right,0px));bottom:calc(86px + env(safe-area-inset-bottom,0px));z-index:30;height:46px;padding:0 16px;border-radius:23px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-weight:700;display:flex;align-items:center;gap:8px;box-shadow:var(--shadow)}
+.fab-2 svg{width:20px;height:20px}
+
+/* Sheets / modals */
+.overlay{position:fixed;inset:0;z-index:70;background:rgba(10,14,26,.72);display:none;align-items:center;justify-content:center;padding:max(12px,env(safe-area-inset-top,0px)) 12px max(12px,env(safe-area-inset-bottom,0px))}
+.overlay.open{display:flex}
+.panel{background:var(--surface);color:var(--ink);border-radius:18px;width:min(520px,100%);max-height:100%;overflow:auto;padding:18px}
+.panel h3{font-family:var(--display);margin:0 0 12px;font-size:1.35rem}
+.row{display:flex;gap:10px}
+.row>*{flex:1}
+label.f{display:block;font-size:.85rem;color:var(--muted);margin:10px 0 4px}
+.panel input[type=text],.panel input[type=number],.panel input[type=url]{width:100%;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);padding:0 12px;font-size:16px}
+.btn{height:46px;border-radius:12px;border:1px solid var(--line);background:var(--bg);padding:0 16px;font-weight:700}
+.btn.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.btn.danger{color:var(--danger);border-color:currentColor;background:transparent}
+.actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+.actions .btn{flex:1;min-width:120px}
+.preview{width:46%;max-width:200px;aspect-ratio:63/88;border-radius:10px;overflow:hidden;background:var(--bg);border:1px solid var(--line);margin:0 auto 6px}
+.preview img{width:100%;height:100%;object-fit:cover}
+.status{font-size:.9rem;color:var(--muted);text-align:center;min-height:1.4em;margin:6px 0 0}
+.status.err{color:var(--danger)}
+.hint{font-size:.85rem;color:var(--muted);margin:8px 0 0}
+.pc-link{color:var(--blue);font-weight:700}
+
+/* Viewer */
+.viewer{position:fixed;inset:0;z-index:60;background:#0B1020;display:none;flex-direction:column;color:#EEF1F8}
+.viewer.open{display:flex}
+.v-bar{display:flex;align-items:center;gap:8px;padding:calc(8px + env(safe-area-inset-top,0px)) 12px 8px}
+.v-bar .sp{flex:1}
+.icon-btn{width:44px;height:44px;border-radius:22px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:inherit;display:grid;place-items:center;font-size:1.3rem;line-height:1}
+.icon-btn svg{width:20px;height:20px}
+.stage{flex:1;position:relative;overflow:hidden;touch-action:none;cursor:grab;min-height:0}
+.stage.drag{cursor:grabbing}
+.stage img{position:absolute;left:50%;top:50%;max-width:92%;max-height:92%;transform-origin:center;user-select:none;-webkit-user-drag:none;border-radius:14px;will-change:transform}
+.v-info{padding:12px 16px calc(14px + env(safe-area-inset-bottom,0px));text-align:center;background:linear-gradient(transparent,rgba(0,0,0,.35))}
+.v-info .name{font-family:var(--display);font-weight:800;font-size:1.6rem;margin:0;letter-spacing:-.01em}
+.v-info .nums{opacity:.8;margin-top:2px}
+.v-info .price{font-size:1.1rem;margin-top:8px}
+.v-info .sub{font-size:.82rem;opacity:.65;margin-top:6px}
+.v-info a{color:#AFC3FF}
+.zoom-hint{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);font-size:.8rem;opacity:.6;pointer-events:none;white-space:nowrap}
+
+#cropView{z-index:75}
+.crop-stage{flex:1;position:relative;overflow:hidden;touch-action:none;min-height:0}
+.crop-stage canvas{position:absolute;left:0;top:0}
+.crop-stage svg{position:absolute;inset:0;width:100%;height:100%}
+.crop-stage polygon{fill:rgba(255,203,5,.10);stroke:#FFCB05;stroke-width:2.5}
+.crop-stage .h{fill:#FFCB05;stroke:#0B1020;stroke-width:2}
+.crop-stage .hit{fill:transparent;cursor:grab}
+.crop-foot{padding:12px 16px calc(14px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px;align-items:center}
+.crop-foot p{margin:0;text-align:center;font-size:.95rem;opacity:.9;min-height:1.4em;max-width:46ch}
+.crop-foot .actions{margin:0;width:min(520px,100%)}
+.crop-foot .btn{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.25);color:#EEF1F8}
+.crop-foot .btn.primary{background:#FFCB05;border-color:#FFCB05;color:#1C2541}
+.spin{display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border:2px solid rgba(255,255,255,.3);border-top-color:#FFCB05;border-radius:50%;animation:sp 0.8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.qbox{position:absolute;inset:auto 12px 12px 12px;margin:0 auto;max-width:460px;background:var(--surface);color:var(--ink);border-radius:16px;padding:16px;box-shadow:0 20px 40px -10px rgba(0,0,0,.6);display:none}
+.qbox.open{display:block}
+.qbox h4{font-family:var(--display);font-size:1.15rem;margin:0 0 6px}
+.qbox p{margin:0 0 4px;color:var(--muted);font-size:.95rem}
+.qbox .actions{margin-top:12px}
+.stage img{border-radius:4.5%/3.2%}
+.toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:10px 16px;border-radius:12px;z-index:80;font-weight:700;display:none}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+[hidden]{display:none!important}
+.owner-link{font-size:.9rem;color:var(--blue);font-weight:700;text-decoration:none;padding:8px 4px}
+.owner-link:hover{text-decoration:underline}
+.rate-note{font-size:.85rem;color:var(--muted)}
+.panel select{width:100%;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);padding:0 10px;font-size:16px}
+.foot{max-width:1200px;margin:0 auto;padding:0 16px 110px;color:var(--muted);font-size:.8rem}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <h1 class="brand"><span class="ball" aria-hidden="true"></span><span class="word">PokeCardBinder</span></h1>
+    <div class="search" role="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="Search name, number or set" aria-label="Search cards" autocomplete="off">
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="worth" aria-live="polite">
+    <div>
+      <h2 id="total">S$0.00</h2>
+      <p id="count">Loading the collection…</p>
+    </div>
+    <div class="tools">
+      <select id="sort" aria-label="Sort cards">
+        <option value="new">Newest first</option>
+        <option value="value">Highest value</option>
+        <option value="name">Name A–Z</option>
+      </select>
+      <span class="rate-note" id="rateNote"></span>
+      <a class="owner-link" id="ownerLink" href="/login.html">Owner login</a>
+      <button class="chip-btn" id="logoutBtn" type="button" hidden>Log out</button>
+    </div>
+  </section>
+  <p class="note" id="pending" hidden></p>
+  <div id="grid" class="grid"></div>
+</main>
+<p class="foot">Prices are TCGplayer market prices, refreshed daily and converted to SGD. Pokémon and card images are trademarks of their respective owners; this is a personal fan collection.</p>
+
+<button class="fab" id="scanBtn" type="button" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><rect x="8.5" y="7.5" width="7" height="9" rx="1"/></svg>
+  Scan card
+</button>
+<button class="fab-2" id="uploadBtn" type="button" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+  Upload photos
+</button>
+<input id="camera" type="file" accept="image/*,.heic,.heif" capture="environment" hidden>
+<input id="picker" type="file" accept="image/*,.heic,.heif,image/heic,image/heif" multiple hidden>
+
+<div class="overlay" id="addSheet" role="dialog" aria-modal="true" aria-labelledby="addTitle">
+  <div class="panel">
+    <h3 id="addTitle">Edit card</h3>
+    <div class="preview"><img id="addImg" alt="Card"></div>
+    <p class="status" id="addStatus"></p>
+    <label class="f" for="fName">Card name</label>
+    <input id="fName" type="text" autocomplete="off" placeholder="Filled in automatically when found">
+    <div class="row">
+      <div><label class="f" for="fNum">Card no.</label><input id="fNum" type="text" autocomplete="off" placeholder="e.g. 220"></div>
+      <div><label class="f" for="fTotal">After the slash</label><input id="fTotal" type="text" autocomplete="off" placeholder="e.g. 187"></div>
+    </div>
+    <div class="row">
+      <div><label class="f" for="fSet">Set code</label><input id="fSet" type="text" autocomplete="off" placeholder="e.g. sv8a or PAF"></div>
+      <div><label class="f" for="fLang">Language</label><select id="fLang"><option value="">Auto</option><option value="ja">Japanese</option><option value="en">English</option><option value="zh">Chinese</option><option value="ko">Korean</option></select></div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="replacePhoto" type="button">Replace photo</button>
+      <button class="btn" id="cancelAdd" type="button">Cancel</button>
+      <button class="btn primary" id="saveBtn" type="button">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="delSheet" role="dialog" aria-modal="true" aria-labelledby="delTitle">
+  <div class="panel">
+    <h3 id="delTitle">Delete this card?</h3>
+    <p id="delText" style="margin:0;color:var(--muted)"></p>
+    <div class="actions">
+      <button class="btn" id="cancelDel" type="button">Keep card</button>
+      <button class="btn danger" id="confirmDel" type="button">Delete card</button>
+    </div>
+  </div>
+</div>
+
+<div class="viewer" id="viewer" role="dialog" aria-modal="true" aria-label="Card viewer">
+  <div class="v-bar">
+    <button class="icon-btn" id="vClose" type="button" aria-label="Close">✕</button>
+    <span class="sp"></span>
+    <button class="icon-btn" id="vOut" type="button" aria-label="Zoom out">−</button>
+    <button class="icon-btn" id="vIn" type="button" aria-label="Zoom in">+</button>
+    <button class="icon-btn" id="vEdit" type="button" aria-label="Edit card" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>
+    <button class="icon-btn" id="vDel" type="button" aria-label="Delete card" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
+  </div>
+  <div class="stage" id="stage">
+    <img id="vImg" alt="">
+    <span class="zoom-hint" id="zHint">Pinch or double-tap to zoom</span>
+  </div>
+  <div class="v-info">
+    <p class="name" id="vName"></p>
+    <div class="nums" id="vNums"></div>
+    <div id="vPrice"></div>
+    <div class="sub" id="vSub"></div>
+  </div>
+</div>
+
+<div class="viewer" id="cropView" role="dialog" aria-modal="true" aria-label="Crop card photo">
+  <div class="v-bar">
+    <button class="icon-btn" id="cropClose" type="button" aria-label="Cancel">✕</button>
+    <span class="sp" style="text-align:center;font-family:var(--display);font-weight:700" id="cropTitle">Crop card</span>
+    <span style="width:44px"></span>
+  </div>
+  <div class="crop-stage" id="cropStage">
+    <canvas id="cropCanvas"></canvas>
+    <svg id="cropSvg" aria-hidden="true"></svg>
+    <div class="qbox" id="qbox" role="alertdialog" aria-labelledby="qTitle">
+      <h4 id="qTitle"></h4>
+      <div id="qText"></div>
+      <div class="actions">
+        <button class="btn" id="qUse" type="button">Use anyway</button>
+        <button class="btn primary" id="qRetake" type="button">Retake photo</button>
+      </div>
+    </div>
+  </div>
+  <div class="crop-foot">
+    <p id="cropStatus" aria-live="polite"></p>
+    <div class="actions">
+      <button class="btn" id="cropRetake" type="button">Retake</button>
+      <button class="btn primary" id="cropOk" type="button">Use this crop</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+/* Image processing for card photos. Works on {data:Uint8ClampedArray(RGBA), width, height}. */
+const IP = (() => {
+  function toGray(img){
+    const {data,width:w,height:h}=img, g=new Float32Array(w*h);
+    for(let i=0,j=0;j<g.length;i+=4,j++) g[j]=0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
+    return g;
+  }
+  function solve(A,b){ // Gaussian elimination, n x n
+    const n=b.length;
+    for(let c=0;c<n;c++){
+      let p=c; for(let r=c+1;r<n;r++) if(Math.abs(A[r][c])>Math.abs(A[p][c])) p=r;
+      [A[c],A[p]]=[A[p],A[c]]; [b[c],b[p]]=[b[p],b[c]];
+      const d=A[c][c]; if(Math.abs(d)<1e-12) return null;
+      for(let r=0;r<n;r++){ if(r===c) continue; const f=A[r][c]/d; if(!f) continue;
+        for(let k=c;k<n;k++) A[r][k]-=f*A[c][k]; b[r]-=f*b[c]; }
+    }
+    return b.map((v,i)=>v/A[i][i]);
+  }
+  // maps (u,v) in dst rect to (x,y) in src quad. quad = [tl,tr,br,bl]
+  function homography(quad,W,H){
+    const dst=[[0,0],[W,0],[W,H],[0,H]], A=[], b=[];
+    for(let i=0;i<4;i++){ const [u,v]=dst[i], [x,y]=quad[i];
+      A.push([u,v,1,0,0,0,-u*x,-v*x]); b.push(x);
+      A.push([0,0,0,u,v,1,-u*y,-v*y]); b.push(y); }
+    const h=solve(A,b); if(!h) return null; h.push(1); return h;
+  }
+  function warp(src,quad,W,H){
+    const h=homography(quad,W,H); if(!h) return null;
+    const out=new Uint8ClampedArray(W*H*4), s=src.data, sw=src.width, sh=src.height;
+    for(let v=0;v<H;v++){ const vv=v+0.5;
+      for(let u=0;u<W;u++){ const uu=u+0.5;
+        const z=h[6]*uu+h[7]*vv+1, x=(h[0]*uu+h[1]*vv+h[2])/z-0.5, y=(h[3]*uu+h[4]*vv+h[5])/z-0.5;
+        let x0=Math.floor(x), y0=Math.floor(y); const fx=x-x0, fy=y-y0;
+        if(x0<0){x0=0;} if(y0<0){y0=0;} if(x0>sw-2) x0=sw-2; if(y0>sh-2) y0=sh-2;
+        const i00=(y0*sw+x0)*4, i10=i00+4, i01=i00+sw*4, i11=i01+4, o=(v*W+u)*4;
+        for(let c=0;c<3;c++){
+          const a=s[i00+c]+(s[i10+c]-s[i00+c])*fx, b2=s[i01+c]+(s[i11+c]-s[i01+c])*fx;
+          out[o+c]=a+(b2-a)*fy; }
+        out[o+3]=255;
+      }}
+    return {data:out,width:W,height:H};
+  }
+  function downscale(img,maxW){
+    const f=Math.max(1,Math.ceil(img.width/maxW)), w=Math.floor(img.width/f), h=Math.floor(img.height/f);
+    const out=new Uint8ClampedArray(w*h*4), d=img.data, W=img.width;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){ let r=0,g=0,b=0;
+      for(let j=0;j<f;j++) for(let i=0;i<f;i++){ const k=((y*f+j)*W+x*f+i)*4; r+=d[k]; g+=d[k+1]; b+=d[k+2]; }
+      const n=f*f, o=(y*w+x)*4; out[o]=r/n; out[o+1]=g/n; out[o+2]=b/n; out[o+3]=255; }
+    return {data:out,width:w,height:h};
+  }
+  // No-reference blur score (Crete-Roffet): 0 = crisp, 1 = very blurry. Content-independent.
+  function blurScore(img){
+    const s=downscale(img,1100), g=toGray(s), w=s.width, h=s.height;
+    const mx=Math.round(w*0.06), my=Math.round(h*0.05), R=6;
+    let sfH=0,svH=0,sfV=0,svV=0;
+    const bh=new Float32Array(w*h), bv=new Float32Array(w*h);
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){ let a=0,b=0;
+      for(let k=-R;k<=R;k++){ a+=g[y*w+Math.min(w-1,Math.max(0,x+k))]; b+=g[Math.min(h-1,Math.max(0,y+k))*w+x]; }
+      bh[y*w+x]=a/(2*R+1); bv[y*w+x]=b/(2*R+1); }
+    for(let y=my;y<h-my;y++) for(let x=mx;x<w-mx;x++){ const i=y*w+x;
+      const dF=Math.abs(g[i]-g[i-1]), dB=Math.abs(bh[i]-bh[i-1]); sfH+=dF; svH+=Math.max(0,dF-dB);
+      const eF=Math.abs(g[i]-g[i-w]), eB=Math.abs(bv[i]-bv[i-w]); sfV+=eF; svV+=Math.max(0,eF-eB); }
+    if(sfH<1||sfV<1) return 1;
+    return Math.max((sfH-svH)/sfH,(sfV-svV)/sfV);
+  }
+  function sobel(g,w,h){
+    const gx=new Float32Array(w*h), gy=new Float32Array(w*h);
+    for(let y=1;y<h-1;y++) for(let x=1;x<w-1;x++){ const i=y*w+x;
+      gx[i]=(g[i-w+1]+2*g[i+1]+g[i+w+1])-(g[i-w-1]+2*g[i-1]+g[i+w-1]);
+      gy[i]=(g[i+w-1]+2*g[i+w]+g[i+w+1])-(g[i-w-1]+2*g[i-w]+g[i-w+1]); }
+    return {gx,gy};
+  }
+  function fitLine(pts){
+    let mx=0,my=0; for(const p of pts){mx+=p[0];my+=p[1];} mx/=pts.length; my/=pts.length;
+    let sxx=0,sxy=0,syy=0; for(const p of pts){const dx=p[0]-mx,dy=p[1]-my; sxx+=dx*dx; sxy+=dx*dy; syy+=dy*dy;}
+    const th=0.5*Math.atan2(2*sxy,sxx-syy); return {px:mx,py:my,dx:Math.cos(th),dy:Math.sin(th)};
+  }
+  const lineDist=(L,p)=>Math.abs((p[0]-L.px)*L.dy-(p[1]-L.py)*L.dx);
+  function intersect(a,b){
+    const den=a.dx*b.dy-a.dy*b.dx; if(Math.abs(den)<1e-6) return null;
+    const t=((b.px-a.px)*b.dy-(b.py-a.py)*b.dx)/den; return [a.px+a.dx*t,a.py+a.dy*t];
+  }
+  // Snap a rough quad (src pixel coords) onto the card's real outer edges.
+  function refine(src,quad,opt){
+    opt=opt||{};
+    const s=downscale(src,1200), f=src.width/s.width, w=s.width, h=s.height;
+    const q=quad.map(p=>[p[0]/f,p[1]/f]), g=toGray(s), {gx,gy}=sobel(g,w,h);
+    const cx=(q[0][0]+q[1][0]+q[2][0]+q[3][0])/4, cy=(q[0][1]+q[1][1]+q[2][1]+q[3][1])/4;
+    const diag=Math.hypot(q[2][0]-q[0][0],q[2][1]-q[0][1]), R=Math.max(6,Math.round(diag*(opt.radius||0.04)));
+    const lines=[];
+    for(let side=0;side<4;side++){
+      const A=q[side], B=q[(side+1)%4], L=Math.hypot(B[0]-A[0],B[1]-A[1]); if(L<10) return quad;
+      const d=[(B[0]-A[0])/L,(B[1]-A[1])/L]; let n=[-d[1],d[0]];
+      const mid=[(A[0]+B[0])/2,(A[1]+B[1])/2]; if(n[0]*(mid[0]-cx)+n[1]*(mid[1]-cy)<0) n=[-n[0],-n[1]];
+      const pts=[];
+      for(let k=0;k<32;k++){ const t=0.1+0.8*k/31, P=[A[0]+(B[0]-A[0])*t,A[1]+(B[1]-A[1])*t];
+        const vals=[]; let best=0;
+        for(let o=-R;o<=R;o++){ const x=Math.round(P[0]+n[0]*o), y=Math.round(P[1]+n[1]*o);
+          if(x<1||y<1||x>=w-1||y>=h-1){vals.push(0);continue;}
+          const i=y*w+x, pr=Math.abs(gx[i]*n[0]+gy[i]*n[1]), mag=Math.hypot(gx[i],gy[i]);
+          const v=pr>0.75*mag?pr:0; vals.push(v); if(v>best) best=v; }
+        if(best<40) continue;
+        let pick=-1; if(opt.strongest){ let bv=-1; for(let o=0;o<vals.length;o++){ const sc=vals[o]*(1-0.45*Math.abs(o-R)/R); if(sc>bv){bv=sc;pick=o;} } } else { for(let o=vals.length-1;o>=0;o--) if(vals[o]>=0.6*best){pick=o;break;} } // strongest, or outermost strong edge
+        const off=pick-R; pts.push([P[0]+n[0]*off,P[1]+n[1]*off]); }
+      if(pts.length<8){ lines.push(null); continue; }
+      let Ln=fitLine(pts);
+      for(let it=0;it<2;it++){ const inl=pts.filter(p=>lineDist(Ln,p)<2.5); if(inl.length<8) break; Ln=fitLine(inl); }
+      lines.push(Ln);
+    }
+    const out=quad.map(p=>p.slice());
+    for(let c=0;c<4;c++){ const a=lines[(c+3)%4], b=lines[c]; if(!a||!b) continue;
+      const p=intersect(a,b); if(!p) continue;
+      if(Math.hypot(p[0]-q[c][0],p[1]-q[c][1])<R*1.8) out[c]=[p[0]*f,p[1]*f]; }
+    return out;
+  }
+
+  // Robust edge snap: for each side, collect sharp step-edge candidates in a band, fit lines by RANSAC,
+  // and prefer the OUTERMOST well-supported straight line (card edge beats inner art frame; soft shadows are not sharp).
+  function refineRobust(src,quad,radius){
+    const s=downscale(src,1200), f=src.width/s.width, w=s.width, h=s.height;
+    const q=quad.map(p=>[p[0]/f,p[1]/f]);
+    // per-channel gradients so colour edges (yellow on white) count even when brightness is similar
+    const ch=[0,1,2].map(c=>{ const a=new Float32Array(w*h); for(let i=0,k=c;i<a.length;i++,k+=4) a[i]=s.data[k]; return a; });
+    const sob=ch.map(a=>sobel(a,w,h)), g=toGray(s);
+    const gx=new Float32Array(w*h), gy=new Float32Array(w*h);
+    const cx=(q[0][0]+q[1][0]+q[2][0]+q[3][0])/4, cy=(q[0][1]+q[1][1]+q[2][1]+q[3][1])/4;
+    const diag=Math.hypot(q[2][0]-q[0][0],q[2][1]-q[0][1]), R=Math.max(6,Math.round(diag*(radius||0.035)));
+    const CH=(c,x,y)=>{ x=Math.round(x); y=Math.round(y); if(x<0||y<0||x>=w||y>=h) return null; return ch[c][y*w+x]; };
+    const G=(x,y)=>{ x=Math.round(x); y=Math.round(y); if(x<0||y<0||x>=w||y>=h) return null; return g[y*w+x]; };
+    const lines=[];
+    for(let side=0;side<4;side++){
+      const A=q[side], B=q[(side+1)%4], L=Math.hypot(B[0]-A[0],B[1]-A[1]); if(L<10) return quad;
+      const d=[(B[0]-A[0])/L,(B[1]-A[1])/L]; let n=[-d[1],d[0]];
+      const mid=[(A[0]+B[0])/2,(A[1]+B[1])/2]; if(n[0]*(mid[0]-cx)+n[1]*(mid[1]-cy)<0) n=[-n[0],-n[1]];
+      const cands=[]; // [x,y,offset,strength]
+      for(let k=0;k<40;k++){ const t=0.1+0.8*k/39, P=[A[0]+(B[0]-A[0])*t,A[1]+(B[1]-A[1])*t];
+        const vals=[];
+        for(let o=-R;o<=R;o++){ const x=Math.round(P[0]+n[0]*o), y=Math.round(P[1]+n[1]*o);
+          if(x<1||y<1||x>=w-1||y>=h-1){vals.push(0);continue;}
+          const i=y*w+x; let bv=0;
+          for(let c=0;c<3;c++){ const X=sob[c].gx[i], Y=sob[c].gy[i], pr=Math.abs(X*n[0]+Y*n[1]), mag=Math.hypot(X,Y); if(pr>0.7*mag && pr>bv) bv=pr; }
+          vals.push(bv); }
+        let best=0; for(const v of vals) if(v>best) best=v; if(best<24) continue;
+        for(let o=1;o<vals.length-1;o++){ const v=vals[o]; if(v<0.1*best||v<20||v<vals[o-1]||v<vals[o+1]) continue;
+          const off=o-R, X=P[0]+n[0]*off, Y=P[1]+n[1]*off;
+          let contrast=0, okc=true; for(let c=0;c<3;c++){ const a=CH(c,X+n[0]*6,Y+n[1]*6), b=CH(c,X-n[0]*6,Y-n[1]*6); if(a==null||b==null){okc=false;break;} contrast=Math.max(contrast,Math.abs(a-b)); }
+          if(!okc) continue; contrast=contrast*4+8; const sharp=v/contrast;   // ~1 for a crisp step, small for a soft shadow ramp
+          if(sharp<0.45) continue;
+          cands.push([X,Y,off,v]); } }
+      if(cands.length<8){ lines.push(null); continue; }
+      // RANSAC: candidate lines from pairs, scored by inlier count; keep all good lines, pick outermost
+      const found=[];
+      for(let it=0;it<260;it++){
+        const p1=cands[(Math.random()*cands.length)|0], p2=cands[(Math.random()*cands.length)|0];
+        const dx=p2[0]-p1[0], dy=p2[1]-p1[1], ll=Math.hypot(dx,dy); if(ll<L*0.25) continue;
+        const ux=dx/ll, uy=dy/ll; if(Math.abs(ux*d[0]+uy*d[1])<0.97) continue;   // must run along the side
+        const inl=cands.filter(c=>Math.abs((c[0]-p1[0])*uy-(c[1]-p1[1])*ux)<1.6);
+        const cover=new Set(inl.map(c=>Math.round(((c[0]-A[0])*d[0]+(c[1]-A[1])*d[1])/L*39))).size;
+        if(cover<12) continue;
+        const Ln=fitLine(inl.map(c=>[c[0],c[1]])), off=inl.reduce((s,c)=>s+c[2],0)/inl.length;
+        found.push({Ln,off,cover});
+      }
+      if(!found.length){ lines.push(null); continue; }
+      const maxCover=Math.max(...found.map(x=>x.cover));
+      const good=found.filter(x=>x.cover>=Math.max(12,maxCover*0.6));
+      good.sort((a,b)=>b.off-a.off);            // outermost first
+      lines.push(good[0].Ln);
+    }
+    const out=quad.map(p=>p.slice());
+    for(let c=0;c<4;c++){ const a=lines[(c+3)%4], b=lines[c]; if(!a||!b) continue;
+      const p=intersect(a,b); if(!p) continue;
+      if(Math.hypot(p[0]-q[c][0],p[1]-q[c][1])<R*2) out[c]=[p[0]*f,p[1]*f]; }
+    return out;
+  }
+  function isConvex(q){
+    let sign=0; for(let i=0;i<4;i++){ const a=q[i],b=q[(i+1)%4],c=q[(i+2)%4];
+      const z=(b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0]); if(Math.abs(z)<1e-6) return false;
+      if(!sign) sign=Math.sign(z); else if(Math.sign(z)!==sign) return false; }
+    return true;
+  }
+  // Specular glare: near-clipped, colourless pixels inside the card (not the border).
+  function glareMask(img){
+    const {data:d,width:w,height:h}=img, m=new Uint8Array(w*h);
+    const mx=Math.round(w*0.055), my=Math.round(h*0.04); let count=0;
+    for(let y=my;y<h-my;y++) for(let x=mx;x<w-mx;x++){ const i=y*w+x, k=i*4;
+      const lo=Math.min(d[k],d[k+1],d[k+2]), hi=Math.max(d[k],d[k+1],d[k+2]);
+      if(lo>=244 && hi-lo<22){ m[i]=1; count++; } }
+    // keep only blobs >= 40 px (ignore tiny holo sparkle), dilate by 3 px
+    const keep=new Uint8Array(w*h), seen=new Uint8Array(w*h), stack=[]; let kept=0;
+    for(let i=0;i<m.length;i++){ if(!m[i]||seen[i]) continue; const comp=[]; stack.push(i); seen[i]=1;
+      while(stack.length){ const p=stack.pop(); comp.push(p); const x=p%w;
+        for(const q of [p-1,p+1,p-w,p+w]){ if(q<0||q>=m.length||seen[q]||!m[q]) continue;
+          if((q===p-1&&x===0)||(q===p+1&&x===w-1)) continue; seen[q]=1; stack.push(q); } }
+      if(comp.length>=40){ for(const p of comp) keep[p]=1; kept+=comp.length; } }
+    const dil=new Uint8Array(w*h), r=3;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){ if(!keep[y*w+x]) continue;
+      for(let j=-r;j<=r;j++) for(let i=-r;i<=r;i++){ const X=x+i,Y=y+j; if(X>=0&&Y>=0&&X<w&&Y<h) dil[Y*w+X]=1; } }
+    const area=(w-2*mx)*(h-2*my);
+    return {mask:dil, frac:kept/area};
+  }
+  // Fill masked pixels from their surroundings, outside-in, then smooth.
+  function inpaint(img,mask){
+    const {data:d,width:w,height:h}=img, known=new Uint8Array(w*h); let todo=[];
+    for(let i=0;i<mask.length;i++){ if(mask[i]) todo.push(i); else known[i]=1; }
+    let guard=0;
+    while(todo.length && guard++<400){
+      const next=[], fill=[];
+      for(const p of todo){ const x=p%w, y=(p-x)/w; let r=0,g=0,b=0,n=0;
+        for(let j=-1;j<=1;j++) for(let i=-1;i<=1;i++){ if(!i&&!j) continue; const X=x+i,Y=y+j;
+          if(X<0||Y<0||X>=w||Y>=h) continue; const q=Y*w+X; if(!known[q]) continue; const k=q*4; r+=d[k];g+=d[k+1];b+=d[k+2];n++; }
+        if(n>=2) fill.push([p,r/n,g/n,b/n]); else next.push(p); }
+      if(!fill.length) break;
+      for(const [p,r,g,b] of fill){ const k=p*4; d[k]=r; d[k+1]=g; d[k+2]=b; known[p]=1; }
+      todo=next;
+    }
+    for(let pass=0;pass<3;pass++) for(let p=0;p<mask.length;p++){ if(!mask[p]) continue;
+      const x=p%w; if(x<1||x>=w-1||p<w||p>=w*(h-1)) continue; const k=p*4;
+      for(let c=0;c<3;c++) d[k+c]=(d[k+c]*2+d[k-4+c]+d[k+4+c]+d[k-w*4+c]+d[k+w*4+c])/6; }
+  }
+  function levels(img){
+    const d=img.data, hist=new Uint32Array(256), n=d.length/4;
+    for(let k=0;k<d.length;k+=4) hist[(0.299*d[k]+0.587*d[k+1]+0.114*d[k+2])|0]++;
+    let lo=0,hi=255,acc=0; for(;lo<255;lo++){acc+=hist[lo]; if(acc>n*0.005) break;}
+    acc=0; for(;hi>0;hi--){acc+=hist[hi]; if(acc>n*0.005) break;}
+    lo=Math.min(lo,45); hi=Math.max(hi,205); if(hi-lo<60) return;
+    const sc=255/(hi-lo); for(let k=0;k<d.length;k+=4) for(let c=0;c<3;c++) d[k+c]=(d[k+c]-lo)*sc;
+  }
+  function sharpen(img,amount){
+    const {data:d,width:w,height:h}=img, src=new Uint8ClampedArray(d);
+    for(let y=1;y<h-1;y++) for(let x=1;x<w-1;x++){ const k=(y*w+x)*4;
+      for(let c=0;c<3;c++){ const bl=(src[k+c]*4+src[k-4+c]+src[k+4+c]+src[k-w*4+c]+src[k+w*4+c]+
+          (src[k-w*4-4+c]+src[k-w*4+4+c]+src[k+w*4-4+c]+src[k+w*4+4+c])*0.5)/10;
+        d[k+c]=src[k+c]+(src[k+c]-bl)*amount; } }
+  }
+  return {warp,refine,refineRobust,isConvex,blurScore,glareMask,inpaint,levels,sharpen,downscale};
+})();
+
+/* Find a rectangular card on a plain background. Returns quad [tl,tr,br,bl] in img pixels (portrait order) or null. */
+function findCardQuad(img){
+  const f0=Math.max(1,Math.ceil(Math.max(img.width,img.height)/720));
+  const s=IP.downscale(img, Math.floor(img.width/f0)), w=s.width, h=s.height, d=s.data, N=w*h;
+  const f=img.width/w;
+  // 1) background colour from a border strip
+  const bw=Math.max(2,Math.round(Math.min(w,h)*0.03)), R=[],G=[],B=[];
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ if(x>=bw&&x<w-bw&&y>=bw&&y<h-bw) continue; const k=(y*w+x)*4; R.push(d[k]);G.push(d[k+1]);B.push(d[k+2]); }
+  const med=a=>{ a.sort((p,q)=>p-q); return a[a.length>>1]; };
+  const br=med(R), bg=med(G), bb=med(B);
+  // 2) colour distance + local edge strength
+  const dist=new Float32Array(N), gray=new Float32Array(N);
+  for(let i=0,k=0;i<N;i++,k+=4){ const dr=d[k]-br, dg=d[k+1]-bg, db=d[k+2]-bb; dist[i]=Math.sqrt(dr*dr+dg*dg+db*db); gray[i]=0.299*d[k]+0.587*d[k+1]+0.114*d[k+2]; }
+  // border-pixel distance spread -> noise floor
+  const bd=[]; for(let y=0;y<h;y+=2) for(let x=0;x<w;x+=2){ if(x>=bw&&x<w-bw&&y>=bw&&y<h-bw) continue; bd.push(dist[y*w+x]); }
+  bd.sort((p,q)=>p-q); const noise=bd[Math.floor(bd.length*0.9)]||0;
+  // Otsu on distance
+  const hist=new Float64Array(256); let mx=1; for(let i=0;i<N;i++) if(dist[i]>mx) mx=dist[i];
+  for(let i=0;i<N;i++) hist[Math.min(255,(dist[i]/mx*255)|0)]++;
+  let sum=0; for(let i=0;i<256;i++) sum+=i*hist[i];
+  let sB=0,wB=0,best=0,thrBin=0; for(let t=0;t<256;t++){ wB+=hist[t]; if(!wB) continue; const wF=N-wB; if(!wF) break; sB+=t*hist[t];
+    const mB=sB/wB, mF=(sum-sB)/wF, v=wB*wF*(mB-mF)*(mB-mF); if(v>best){best=v;thrBin=t;} }
+  // plain backgrounds have a low noise floor -> use a low threshold so light borders (yellow/silver on white) count as card
+  let thr=Math.max(noise*2.2+10, 20);
+  { let cnt=0; for(let i=0;i<N;i++) if(dist[i]>thr) cnt++; if(cnt>N*0.85) thr=Math.max(thrBin/255*mx, noise*1.6+8, 18); }
+  let mask=new Uint8Array(N);
+  const bsum=br+bg+bb+3;
+  for(let i=0,k=0;i<N;i++,k+=4){
+    if(dist[i]<=thr) continue;
+    mask[i]=1; }
+  // add strong edges (helps silver/white borders on light backgrounds)
+  for(let y=1;y<h-1;y++) for(let x=1;x<w-1;x++){ const i=y*w+x;
+    const gx=gray[i+1]-gray[i-1], gy=gray[i+w]-gray[i-w]; if(gx*gx+gy*gy>(noise*2+30)**2) mask[i]=1; }
+  // 3) morphology: close (dilate r, erode r) then open small
+  const morph=(m,r,dil)=>{ const t=new Uint8Array(N), o=new Uint8Array(N);
+    for(let y=0;y<h;y++){ for(let x=0;x<w;x++){ let v=dil?0:1; for(let k=-r;k<=r;k++){ const X=x+k; if(X<0||X>=w) { if(!dil){v=v;} continue; } const q=m[y*w+X]; if(dil){ if(q){v=1;break;} } else { if(!q){v=0;break;} } } t[y*w+x]=v; } }
+    for(let x=0;x<w;x++){ for(let y=0;y<h;y++){ let v=dil?0:1; for(let k=-r;k<=r;k++){ const Y=y+k; if(Y<0||Y>=h) continue; const q=t[Y*w+x]; if(dil){ if(q){v=1;break;} } else { if(!q){v=0;break;} } } o[y*w+x]=v; } }
+    return o; };
+  const rc=Math.max(2,Math.round(Math.min(w,h)*0.008));
+  mask=morph(morph(mask,rc,true),rc,false);
+  mask=morph(morph(mask,1,false),1,true);
+  // 4) largest connected component
+  const lab=new Int32Array(N), stack=new Int32Array(N); let bestLab=0,bestSize=0,cur=0;
+  for(let i=0;i<N;i++){ if(!mask[i]||lab[i]) continue; cur++; let sp=0,size=0; stack[sp++]=i; lab[i]=cur;
+    while(sp){ const p=stack[--sp]; size++; const x=p%w;
+      if(x>0&&mask[p-1]&&!lab[p-1]){lab[p-1]=cur;stack[sp++]=p-1;}
+      if(x<w-1&&mask[p+1]&&!lab[p+1]){lab[p+1]=cur;stack[sp++]=p+1;}
+      if(p>=w&&mask[p-w]&&!lab[p-w]){lab[p-w]=cur;stack[sp++]=p-w;}
+      if(p<N-w&&mask[p+w]&&!lab[p+w]){lab[p+w]=cur;stack[sp++]=p+w;} }
+    if(size>bestSize){bestSize=size;bestLab=cur;} }
+  if(!bestLab || bestSize < N*0.03) return null;
+  // fill holes: flood the outside from the image border
+  const comp=new Uint8Array(N); for(let i=0;i<N;i++) comp[i]=lab[i]===bestLab?1:0;
+  const out=new Uint8Array(N); let sp=0;
+  const push=p=>{ if(!comp[p]&&!out[p]){out[p]=1;stack[sp++]=p;} };
+  for(let x=0;x<w;x++){push(x);push(N-w+x);} for(let y=0;y<h;y++){push(y*w);push(y*w+w-1);}
+  while(sp){ const p=stack[--sp], x=p%w; if(x>0)push(p-1); if(x<w-1)push(p+1); if(p>=w)push(p-w); if(p<N-w)push(p+w); }
+  let area=0; const pts=[];
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=y*w+x; if(out[i]) continue; area++;
+    if(x===0||y===0||x===w-1||y===h-1||out[i-1]||out[i+1]||out[i-w]||out[i+w]) pts.push([x,y]); }
+  // touching the image border = card cut off
+  // 5) convex hull
+  pts.sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+  const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+  const lo=[],up=[]; for(const p of pts){ while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],p)<=0) lo.pop(); lo.push(p); }
+  for(let i=pts.length-1;i>=0;i--){ const p=pts[i]; while(up.length>=2&&cr(up[up.length-2],up[up.length-1],p)<=0) up.pop(); up.push(p); }
+  const hull=lo.slice(0,-1).concat(up.slice(0,-1)); if(hull.length<4) return null;
+  // 6) global max-area inscribed quad: resample hull to 72 evenly spaced points, search all 4-point combinations
+  const per=[]; let P=0; for(let i=0;i<hull.length;i++){ const a=hull[i], b=hull[(i+1)%hull.length]; const l=Math.hypot(b[0]-a[0],b[1]-a[1]); per.push(l); P+=l; }
+  const M=72, rs=[]; { let seg=0, acc=0; for(let k=0;k<M;k++){ const target=k*P/M;
+      while(acc+per[seg]<target && seg<hull.length-1){ acc+=per[seg]; seg++; }
+      const a=hull[seg], b=hull[(seg+1)%hull.length], t=per[seg]?(target-acc)/per[seg]:0; rs.push([a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t]); } }
+  const X=rs.map(p=>p[0]), Y=rs.map(p=>p[1]);
+  let bestA=-1, bi=[0,1,2,3];
+  for(let i=0;i<M;i++) for(let j=i+1;j<M;j++){
+    // for fixed diagonal i-j, best k on one side and l on the other maximise triangle areas independently
+    const dx=X[j]-X[i], dy=Y[j]-Y[i]; let a1=-1,k1=-1,a2=-1,l2=-1;
+    for(let k=i+1;k<j;k++){ const a=Math.abs(dx*(Y[k]-Y[i])-dy*(X[k]-X[i])); if(a>a1){a1=a;k1=k;} }
+    for(let l=j+1;l<M+i;l++){ const L=l%M; const a=Math.abs(dx*(Y[L]-Y[i])-dy*(X[L]-X[i])); if(a>a2){a2=a;l2=L;} }
+    if(k1<0||l2<0) continue; const A=a1+a2; if(A>bestA){ bestA=A; bi=[i,k1,j,l2]; } }
+  let q=bi.map(k=>rs[k]);
+  if(globalThis.__dbg){ globalThis.__dbg.hull=hull; globalThis.__dbg.q0=q.map(p=>p.slice()); globalThis.__dbg.f=f; }
+  const qa=q=>{ let a=0; for(let i=0;i<4;i++){ const p=q[i],n=q[(i+1)%4]; a+=p[0]*n[1]-n[0]*p[1]; } return Math.abs(a)/2; };
+  // order around centroid, clockwise starting top-left-ish
+  const cx=q.reduce((s,p)=>s+p[0],0)/4, cy=q.reduce((s,p)=>s+p[1],0)/4;
+  q.sort((a,b)=>Math.atan2(a[1]-cy,a[0]-cx)-Math.atan2(b[1]-cy,b[0]-cx)); // clockwise in screen coords (y down)
+  let st=0, bs=Infinity; q.forEach((p,i)=>{ const v=p[0]+p[1]; if(v<bs){bs=v;st=i;} }); q=[0,1,2,3].map(i=>q[(st+i)%4]);
+  // portrait: if top edge longer than left edge, card lies sideways -> rotate order
+  const L=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+  let landscape=false;
+  if((L(q[0],q[1])+L(q[2],q[3])) > (L(q[1],q[2])+L(q[3],q[0]))){ q=[q[3],q[0],q[1],q[2]]; landscape=true; }
+  // validate
+  const qArea=qa(q), ratio=Math.min(L(q[0],q[1]),L(q[1],q[2]))/Math.max(L(q[0],q[1]),L(q[1],q[2]));
+  const sideRatio=((L(q[0],q[1])+L(q[2],q[3]))/2)/((L(q[1],q[2])+L(q[3],q[0]))/2);
+  const fill=area/qArea;
+  if(sideRatio<0.5||sideRatio>0.95||fill<0.85||fill>1.16) return null;
+  const touches=q.some(p=>p[0]<=1||p[1]<=1||p[0]>=w-2||p[1]>=h-2);
+  return { quad:q.map(p=>[p[0]*f,p[1]*f]), landscape, touches, fill, sideRatio };
+}
+
+/* Find an upright-ish card by its four straight border edges (ignores faint toploader plastic). */
+function findCardAxis(img){
+  const f0=Math.max(1,Math.ceil(Math.max(img.width,img.height)/700));
+  const s=IP.downscale(img, Math.floor(img.width/f0)), w=s.width, h=s.height, d=s.data, f=img.width/w;
+  const g=new Float32Array(w*h); for(let i=0,k=0;i<g.length;i++,k+=4) g[i]=0.299*d[k]+0.587*d[k+1]+0.114*d[k+2];
+  const gx=new Float32Array(w*h), gy=new Float32Array(w*h);
+  for(let y=1;y<h-1;y++) for(let x=1;x<w-1;x++){ const i=y*w+x;
+    gx[i]=(g[i-w+1]+2*g[i+1]+g[i+w+1])-(g[i-w-1]+2*g[i-1]+g[i+w-1]);
+    gy[i]=(g[i+w-1]+2*g[i+w]+g[i+w+1])-(g[i-w-1]+2*g[i-w]+g[i-w+1]); }
+  // edge maps: vertical edges (strong |gx|), horizontal edges (strong |gy|)
+  const V=new Float32Array(w*h), H=new Float32Array(w*h);
+  for(let i=0;i<w*h;i++){ const ax=Math.abs(gx[i]), ay=Math.abs(gy[i]); if(ax>ay*1.3) V[i]=ax; if(ay>ax*1.3) H[i]=ay; }
+  const colP=new Float32Array(w), rowP=new Float32Array(h);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ colP[x]+=V[y*w+x]; rowP[y]+=H[y*w+x]; }
+  const peaks=(P,n,k)=>{ const sm=new Float32Array(n); for(let i=0;i<n;i++){ let a=0,c=0; for(let j=-2;j<=2;j++){ const t=i+j; if(t>=0&&t<n){a+=P[t];c++;} } sm[i]=a/c; }
+    const out=[]; for(let i=3;i<n-3;i++){ let m=true; for(let j=-6;j<=6;j++){ const t=i+j; if(t<0||t>=n||j===0) continue; if(sm[t]>sm[i]){m=false;break;} } if(m) out.push([i,sm[i]]); }
+    out.sort((a,b)=>b[1]-a[1]); return out.slice(0,k).map(p=>p[0]); };
+  const xs=peaks(colP,w,14), ys=peaks(rowP,h,14);
+  // coverage of a segment: fraction of points with a real edge within ±2px (card borders are continuous; art lines are not)
+  let mx=0; for(let i=0;i<w*h;i++){ if(V[i]>mx) mx=V[i]; if(H[i]>mx) mx=H[i]; }
+  const T=Math.max(30, mx*0.08);
+  const vCov=(x,y0,y1)=>{ let c=0,n=0; for(let y=y0;y<=y1;y++){ let b=0; for(let o=-2;o<=2;o++){ const X=x+o; if(X>0&&X<w) b=Math.max(b,V[y*w+X]); } if(b>T) c++; n++; } return c/Math.max(1,n); };
+  const hCov=(y,x0,x1)=>{ let c=0,n=0; for(let x=x0;x<=x1;x++){ let b=0; for(let o=-2;o<=2;o++){ const Y=y+o; if(Y>0&&Y<h) b=Math.max(b,H[Y*w+x]); } if(b>T) c++; n++; } return c/Math.max(1,n); };
+  // contrast across a side: mean |inside - outside| brightness, sampled pointwise just inside vs just outside
+  const G=(x,y)=>g[Math.min(h-1,Math.max(0,y))*w+Math.min(w-1,Math.max(0,x))];
+  const sideContrast=(x0,y0,x1,y1,nx,ny)=>{ const n=40; let s=0; for(let k=0;k<n;k++){ const t=0.1+0.8*k/(n-1), X=Math.round(x0+(x1-x0)*t), Y=Math.round(y0+(y1-y0)*t);
+      let a=0,b=0; for(let o=3;o<=7;o++){ a+=G(X-nx*o,Y-ny*o); b+=G(X+nx*o,Y+ny*o); } s+=Math.abs(a-b)/5; } return s/n; };
+  const cands=[];
+  for(let a=0;a<xs.length;a++) for(let b=0;b<xs.length;b++){ const xl=xs[a], xr=xs[b]; if(xr-xl<w*0.2) continue;
+    for(let c=0;c<ys.length;c++) for(let e=0;e<ys.length;e++){ const yt=ys[c], yb=ys[e]; if(yb-yt<h*0.2) continue;
+      const r=(xr-xl)/(yb-yt); if(Math.abs(r-63/88)>0.05) continue;
+      const m=Math.round((yb-yt)*0.08), n2=Math.round((xr-xl)*0.08);
+      const cov=Math.min(vCov(xl,yt+m,yb-m), vCov(xr,yt+m,yb-m), hCov(yt,xl+n2,xr-n2), hCov(yb,xl+n2,xr-n2));
+      if(cov<0.5) continue;
+      // outward normals: left (-1,0), right (1,0), top (0,-1), bottom (0,1)
+      const con=Math.min(sideContrast(xl,yt,xl,yb,-1,0), sideContrast(xr,yt,xr,yb,1,0), sideContrast(xl,yt,xr,yt,0,-1), sideContrast(xl,yb,xr,yb,0,1));
+      cands.push({score:cov*con,cov,con,xl,xr,yt,yb,area:(xr-xl)*(yb-yt)}); } }
+  if(!cands.length) return null;
+  const top=Math.max(...cands.map(c=>c.score));
+  if(top<6) return null;
+  const good=cands.filter(c=>c.score>=top*0.8);
+  good.sort((p,q)=>q.area-p.area);
+  const best=good[0];
+  // fine-tune each side independently within ±12% of the card size
+  let {xl,xr,yt,yb}=best;
+  const tune=(cur,lo,hi,fn)=>{ let bv=-1,bp=cur; for(let p=Math.max(2,lo);p<=Math.min(hi,(fn.lim)-3);p++){ const v=fn(p); if(v>bv){bv=v;bp=p;} } return bp; };
+  for(let it=0;it<2;it++){
+    const cw=xr-xl, ch=yb-yt, mY=Math.round(ch*0.08), mX=Math.round(cw*0.08), dx=Math.round(cw*0.12), dy=Math.round(ch*0.12);
+    const L=p=>vCov(p,yt+mY,yb-mY)*sideContrast(p,yt,p,yb,-1,0); L.lim=w;
+    const R=p=>vCov(p,yt+mY,yb-mY)*sideContrast(p,yt,p,yb,1,0); R.lim=w;
+    const T=p=>hCov(p,xl+mX,xr-mX)*sideContrast(xl,p,xr,p,0,-1); T.lim=h;
+    const B=p=>hCov(p,xl+mX,xr-mX)*sideContrast(xl,p,xr,p,0,1); B.lim=h;
+    const nl=tune(xl,xl-dx,xl+dx,L), nr=tune(xr,xr-dx,xr+dx,R), nt=tune(yt,yt-dy,yt+dy,T), nb=tune(yb,yb-dy,yb+dy,B);
+    if(nr-nl>w*0.15 && nb-nt>h*0.15 && Math.abs((nr-nl)/(nb-nt)-63/88)<0.06){ xl=nl; xr=nr; yt=nt; yb=nb; }
+  }
+  return { quad:[[xl*f,yt*f],[xr*f,yt*f],[xr*f,yb*f],[xl*f,yb*f]], score:best.score };
+}
+
+(function(){
+const $ = id => document.getElementById(id);
+const state = { cards: [], rate: 1.28, owner: false, ai: false, q: "", sort: "new", viewing: null, editing: null, batchCancel: false, lastSource: "camera" };
+const CARD_W = 1100, CARD_H = 1536;
+
+/* ---------- small helpers ---------- */
+const sgd = usd => "S$" + (usd * state.rate).toLocaleString("en-SG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.style.display="block"; clearTimeout(toast._t); toast._t=setTimeout(()=>t.style.display="none",2600); }
+const imgUrl = (c, thumb) => `/api/img/${c.id}?v=${c.img_ver||1}${thumb ? "&t=thumb" : ""}`;
+const pcUrl = c => "https://www.pricecharting.com/search-products?type=prices&q=" + encodeURIComponent([c.name, c.number && "#"+c.number].filter(Boolean).join(" "));
+const fmtDate = iso => iso ? new Date(iso).toLocaleDateString("en-SG", { day:"numeric", month:"short", year:"numeric" }) : "";
+const frame = () => new Promise(r=>requestAnimationFrame(()=>setTimeout(r,20)));
+async function api(path, opts={}){
+  const r = await fetch(path, { credentials:"same-origin", ...opts });
+  let d = null; try { d = await r.json(); } catch {}
+  if(!r.ok) { const e = new Error((d && d.error) || ("Request failed (" + r.status + ")")); e.status = r.status; throw e; }
+  return d;
+}
+
+/* ---------- loading & rendering ---------- */
+async function load(){
+  try{
+    const [me, list] = await Promise.all([ api("/api/me"), api("/api/cards") ]);
+    state.owner = !!me.owner; state.ai = !!me.ai;
+    state.rate = Number(list.usdToSgd || me.usdToSgd) || 1.28;
+    state.cards = list.cards || [];
+    applyOwnerUI(me);
+    render();
+  }catch(e){
+    $("count").textContent = "Couldn't load the collection. Check your connection and reload.";
+  }
+}
+function applyOwnerUI(me){
+  $("scanBtn").hidden = $("uploadBtn").hidden = !state.owner;
+  $("vEdit").hidden = $("vDel").hidden = !state.owner;
+  $("ownerLink").hidden = state.owner; $("logoutBtn").hidden = !state.owner;
+  $("rateNote").textContent = `US$1 = S$${state.rate.toFixed(4).replace(/0+$/,"").replace(/\.$/,"")}`;
+}
+function filtered(){
+  const q = state.q.trim().toLowerCase();
+  const list = state.cards.filter(c => !q || [c.name, c.number, c.set_name, c.set_code].filter(Boolean).join(" ").toLowerCase().includes(q));
+  const by = { new:(a,b)=>(b.added_at||"").localeCompare(a.added_at||""), value:(a,b)=>(b.price_usd||0)-(a.price_usd||0), name:(a,b)=>(a.name||"").localeCompare(b.name||"") };
+  return list.sort(by[state.sort]);
+}
+function render(){
+  const total = state.cards.reduce((s,c)=>s+(c.price_usd||0),0), n = state.cards.length;
+  $("total").textContent = sgd(total);
+  $("count").textContent = n ? `Collection value across ${n} card${n>1?"s":""}` : "No cards yet";
+  const review = state.cards.filter(c=>c.needs_review).length;
+  $("pending").hidden = !(state.owner && review);
+  if(state.owner && review) $("pending").textContent = `${review} card${review>1?"s need":" needs"} details. Tap the card, then the pencil to add its name and number.`;
+  const g = $("grid"); g.textContent = "";
+  const list = filtered();
+  if(!n){ g.innerHTML = `<div class="empty" style="grid-column:1/-1"><h3>${state.owner ? "Scan your first card" : "No cards yet"}</h3><p>${state.owner ? "Tap “Scan card”, take a photo of the front, and it lands in the binder." : "Check back soon."}</p></div>`; return; }
+  if(!list.length){ const e=document.createElement("div"); e.className="empty"; e.style.gridColumn="1/-1"; e.innerHTML="<h3></h3><p>Try a Pokémon name, card number or set.</p>"; e.querySelector("h3").textContent=`No cards match “${state.q}”`; g.appendChild(e); return; }
+  for(const c of list){
+    const b=document.createElement("button"); b.className="card"; b.type="button";
+    const sl=document.createElement("div"); sl.className="sleeve";
+    const im=document.createElement("img"); im.loading="lazy"; im.alt=c.name||"Card"; im.src=imgUrl(c,true); sl.appendChild(im);
+    const m=document.createElement("div"); m.className="meta";
+    const nm=document.createElement("p"); nm.className="name"; nm.textContent=c.name||"New card";
+    const nu=document.createElement("div"); nu.className="nums"; nu.textContent=c.number?`Card ${c.number}`:"";
+    const pr=document.createElement("span");
+    if(c.price_usd!=null){ pr.className="price"; pr.textContent=sgd(c.price_usd); }
+    else { pr.className="price none"; pr.textContent = c.needs_review ? "Needs details" : "No price found"; }
+    m.append(nm,nu,pr); b.append(sl,m); b.onclick=()=>openViewer(c.id); g.appendChild(b);
+  }
+}
+$("q").addEventListener("input",e=>{ state.q=e.target.value; render(); });
+$("sort").addEventListener("change",e=>{ state.sort=e.target.value; render(); });
+$("logoutBtn").onclick = async () => { try{ await api("/api/logout",{method:"POST"}); }catch{} location.reload(); };
+
+/* ---------- viewer with pinch zoom ---------- */
+const z = { s:1, x:0, y:0, ptrs:new Map(), startDist:0, startS:1, last:null, lastTap:0 };
+function applyZ(){ $("vImg").style.transform=`translate(calc(-50% + ${z.x}px), calc(-50% + ${z.y}px)) scale(${z.s})`; $("zHint").style.display = z.s>1?"none":""; }
+function clampPan(){ const st=$("stage").getBoundingClientRect(), im=$("vImg"); const w=im.offsetWidth*z.s, h=im.offsetHeight*z.s; const mx=Math.max(0,(w-st.width)/2+40), my=Math.max(0,(h-st.height)/2+40); z.x=Math.max(-mx,Math.min(mx,z.x)); z.y=Math.max(-my,Math.min(my,z.y)); }
+function setScale(ns,cx,cy){
+  ns=Math.max(1,Math.min(5,ns));
+  if(cx!=null){ const r=$("stage").getBoundingClientRect(); const px=cx-r.left-r.width/2, py=cy-r.top-r.height/2; z.x=px-(px-z.x)*(ns/z.s); z.y=py-(py-z.y)*(ns/z.s); }
+  z.s=ns; if(z.s===1){z.x=0;z.y=0;} clampPan(); applyZ();
+}
+const stage=$("stage");
+stage.addEventListener("pointerdown",e=>{ stage.setPointerCapture(e.pointerId); z.ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(z.ptrs.size===2){ const [a,b]=[...z.ptrs.values()]; z.startDist=Math.hypot(a.x-b.x,a.y-b.y); z.startS=z.s; }
+  else { z.last={x:e.clientX,y:e.clientY}; stage.classList.add("drag"); const now=Date.now(); if(now-z.lastTap<300){ setScale(z.s>1?1:2.5,e.clientX,e.clientY); z.lastTap=0; } else z.lastTap=now; } });
+stage.addEventListener("pointermove",e=>{ if(!z.ptrs.has(e.pointerId)) return; z.ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(z.ptrs.size===2){ const [a,b]=[...z.ptrs.values()]; setScale(z.startS*Math.hypot(a.x-b.x,a.y-b.y)/z.startDist,(a.x+b.x)/2,(a.y+b.y)/2); }
+  else if(z.ptrs.size===1 && z.last && z.s>1){ z.x+=e.clientX-z.last.x; z.y+=e.clientY-z.last.y; z.last={x:e.clientX,y:e.clientY}; clampPan(); applyZ(); } });
+const endPtr=e=>{ z.ptrs.delete(e.pointerId); if(z.ptrs.size===1){ const p=[...z.ptrs.values()][0]; z.last={x:p.x,y:p.y}; } if(!z.ptrs.size){ z.last=null; stage.classList.remove("drag"); } };
+stage.addEventListener("pointerup",endPtr); stage.addEventListener("pointercancel",endPtr);
+stage.addEventListener("wheel",e=>{ e.preventDefault(); setScale(z.s*(e.deltaY<0?1.15:1/1.15),e.clientX,e.clientY); },{passive:false});
+$("vIn").onclick=()=>setScale(z.s*1.5); $("vOut").onclick=()=>setScale(z.s/1.5);
+
+function showViewerData(id){
+  const c=state.cards.find(x=>x.id===id); if(!c){ closeViewer(); return; }
+  $("vImg").src=imgUrl(c,false); $("vImg").alt=c.name||"Card";
+  $("vName").textContent=c.name||"New card";
+  $("vNums").textContent=[c.number?`Card ${c.number}`:"", c.set_name||""].filter(Boolean).join("   ");
+  const vp=$("vPrice"); vp.textContent="";
+  const sp=document.createElement("span");
+  if(c.price_usd!=null){ sp.className="price"; sp.textContent=`${sgd(c.price_usd)}  (US$${Number(c.price_usd).toFixed(2)})`; }
+  else { sp.className="price none"; sp.style.color="#c9d1e6"; sp.textContent=c.needs_review?"Needs details":"No price found"; }
+  vp.appendChild(sp);
+  const sub=$("vSub"); sub.textContent = c.price_updated ? `TCGplayer market price, updated ${fmtDate(c.price_updated)}. ` : "";
+  const a=document.createElement("a"); a.href=pcUrl(c); a.target="_blank"; a.rel="noopener"; a.textContent="PriceCharting"; sub.appendChild(a);
+  if(c.tcg_url){ sub.append(" · "); const t=document.createElement("a"); t.href=c.tcg_url; t.target="_blank"; t.rel="noopener"; t.textContent="TCGplayer"; sub.appendChild(t); }
+}
+function openViewer(id){ state.viewing=id; z.s=1;z.x=0;z.y=0; applyZ(); showViewerData(id); $("viewer").classList.add("open"); document.body.style.overflow="hidden"; $("vClose").focus(); }
+function closeViewer(){ $("viewer").classList.remove("open"); document.body.style.overflow=""; state.viewing=null; }
+$("vClose").onclick=closeViewer;
+
+/* ---------- owner: edit & delete ---------- */
+function openSheet(id){ $(id).classList.add("open"); } function closeSheet(id){ $(id).classList.remove("open"); }
+$("vEdit").onclick=()=>{ const c=state.cards.find(x=>x.id===state.viewing); if(!c) return; state.editing=c.id;
+  $("addImg").src=imgUrl(c,true); $("fName").value=c.name||""; $("fNum").value=c.number||""; $("fTotal").value=c.total||""; $("fSet").value=c.set_code||""; $("fLang").value=c.lang||"";
+  $("addStatus").className="status"; $("addStatus").textContent="Fix any detail, then save. The price is looked up again automatically."; openSheet("addSheet"); };
+$("cancelAdd").onclick=()=>{ closeSheet("addSheet"); state.editing=null; };
+$("replacePhoto").onclick=()=>{ closeSheet("addSheet"); pickPhoto("camera", true); };
+$("saveBtn").onclick=async()=>{
+  const id=state.editing; if(!id) return;
+  const btn=$("saveBtn"); btn.disabled=true; $("addStatus").textContent="Saving…";
+  try{
+    const d=await api(`/api/cards/${id}`,{ method:"PATCH", headers:{"content-type":"application/json"}, body:JSON.stringify({
+      name:$("fName").value, number:$("fNum").value.split("/")[0].trim(), total:$("fTotal").value.trim(), setCode:$("fSet").value.trim(), lang:$("fLang").value, relookup:true }) });
+    upsert(d.card); closeSheet("addSheet"); toast("Card updated"); if(state.viewing===id) showViewerData(id);
+  }catch(e){ $("addStatus").className="status err"; $("addStatus").textContent=e.message; }
+  finally{ btn.disabled=false; }
+};
+$("vDel").onclick=()=>{ const c=state.cards.find(x=>x.id===state.viewing); if(!c) return; $("delText").textContent=`${c.name||"This card"}${c.number?" #"+c.number:""} will be removed from the binder for good.`; openSheet("delSheet"); };
+$("cancelDel").onclick=()=>closeSheet("delSheet");
+$("confirmDel").onclick=async()=>{ const id=state.viewing; try{ await api(`/api/cards/${id}`,{method:"DELETE"}); state.cards=state.cards.filter(c=>c.id!==id); closeSheet("delSheet"); closeViewer(); render(); toast("Card deleted"); }catch(e){ toast(e.message); } };
+function upsert(card){ const i=state.cards.findIndex(c=>c.id===card.id); if(i>=0) state.cards[i]=card; else state.cards.unshift(card); render(); }
+document.addEventListener("keydown",e=>{ if(e.key!=="Escape") return; if($("cropView").classList.contains("open")){ state.batchCancel=true; closeCrop(); return; } for(const id of ["delSheet","addSheet"]) if($(id).classList.contains("open")){ closeSheet(id); return; } if($("viewer").classList.contains("open")) closeViewer(); });
+
+/* ---------- photos: decode (incl. HEIC) ---------- */
+async function loadBitmap(file){
+  try { return await createImageBitmap(file,{imageOrientation:"from-image"}); }
+  catch { return await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=URL.createObjectURL(file); }); }
+}
+async function looksHeic(file){
+  if(/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name||"")) return true;
+  try{ const b=new Uint8Array(await file.slice(4,12).arrayBuffer()); return /^ftyp(heic|heix|hevc|hevx|heim|heis|mif1|msf1)/.test(String.fromCharCode(...b)); }catch{ return false; }
+}
+let heicLib=null;
+async function decodeAny(file,onStatus){
+  if(!(await looksHeic(file))) return await loadBitmap(file);
+  try{ const b=await loadBitmap(file); if(b && b.width) return b; }catch{}
+  onStatus && onStatus("Converting HEIC photo…");
+  if(!heicLib) heicLib=import("https://cdn.jsdelivr.net/npm/heic-to@1.6.5/dist/csp/heic-to.min.js");
+  const mod=await heicLib; return await loadBitmap(await mod.heicTo({ blob:file, type:"image/jpeg", quality:0.92 }));
+}
+function drawTo(src,maxSide){ const w=src.width,h=src.height,s=Math.min(1,maxSide/Math.max(w,h)); const c=document.createElement("canvas"); c.width=Math.round(w*s); c.height=Math.round(h*s); const g=c.getContext("2d"); g.imageSmoothingQuality="high"; g.drawImage(src,0,0,c.width,c.height); return c; }
+const toBlob=(c,q)=>new Promise(r=>c.toBlob(r,"image/jpeg",q));
+const getPixels=c=>c.getContext("2d").getImageData(0,0,c.width,c.height);
+async function toB64(blob){ return await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(",")[1]); r.onerror=rej; r.readAsDataURL(blob); }); }
+
+/* ---------- crop editor ---------- */
+const crop={ src:null, quad:null, view:null, drag:-1, token:0, replaceFor:null };
+function cropStatus(t,err){ const el=$("cropStatus"); el.textContent=t; el.style.color=err?"#FF9A9A":""; }
+function busy(t){ const el=$("cropStatus"); el.style.color=""; el.innerHTML='<span class="spin" aria-hidden="true"></span>'; el.append(t); }
+function openCrop(title){ $("cropTitle").textContent=title||"Crop card"; $("cropView").classList.add("open"); document.body.style.overflow="hidden"; $("qbox").classList.remove("open"); }
+function closeCrop(){ crop.token++; $("cropView").classList.remove("open"); if(!$("viewer").classList.contains("open")) document.body.style.overflow=""; }
+$("cropClose").onclick=()=>{ state.batchCancel=true; closeCrop(); };
+$("cropRetake").onclick=()=>pickPhoto(state.lastSource, !!crop.replaceFor);
+function defaultQuad(w,h){ let ch=h*0.8, cw=ch*63/88; if(cw>w*0.8){ cw=w*0.8; ch=cw*88/63; } const x=(w-cw)/2, y=(h-ch)/2; return [[x,y],[x+cw,y],[x+cw,y+ch],[x,y+ch]]; }
+function layoutCrop(){
+  if(!crop.src) return;
+  const st=$("cropStage").getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+  const sc=Math.min(st.width/crop.src.width, st.height/crop.src.height)*0.92, w=crop.src.width*sc, h=crop.src.height*sc;
+  crop.view={sc, ox:(st.width-w)/2, oy:(st.height-h)/2};
+  const c=$("cropCanvas"); c.width=Math.round(w*dpr); c.height=Math.round(h*dpr); c.style.width=w+"px"; c.style.height=h+"px"; c.style.left=crop.view.ox+"px"; c.style.top=crop.view.oy+"px";
+  c.getContext("2d").drawImage(crop.src,0,0,c.width,c.height); drawQuad();
+}
+function drawQuad(){
+  const v=crop.view, svg=$("cropSvg"); if(!v||!crop.quad){ svg.innerHTML=""; return; }
+  const P=crop.quad.map(p=>[p[0]*v.sc+v.ox, p[1]*v.sc+v.oy]);
+  svg.innerHTML=`<polygon points="${P.map(p=>p.join(",")).join(" ")}"/>`+P.map((p,i)=>`<circle class="h" cx="${p[0]}" cy="${p[1]}" r="11"/><circle class="hit" data-i="${i}" cx="${p[0]}" cy="${p[1]}" r="28"/>`).join("");
+}
+window.addEventListener("resize",()=>{ if($("cropView").classList.contains("open")) layoutCrop(); });
+$("cropSvg").addEventListener("pointerdown",e=>{ const i=e.target.getAttribute&&e.target.getAttribute("data-i"); if(i==null) return; crop.drag=+i; $("cropSvg").setPointerCapture(e.pointerId); e.preventDefault(); });
+$("cropSvg").addEventListener("pointermove",e=>{ if(crop.drag<0) return; const v=crop.view, r=$("cropStage").getBoundingClientRect();
+  crop.quad[crop.drag]=[Math.max(0,Math.min(crop.src.width,(e.clientX-r.left-v.ox)/v.sc)), Math.max(0,Math.min(crop.src.height,(e.clientY-r.top-v.oy)/v.sc))]; drawQuad(); });
+const endDrag=()=>{ crop.drag=-1; }; $("cropSvg").addEventListener("pointerup",endDrag); $("cropSvg").addEventListener("pointercancel",endDrag);
+
+function showProblem(title, lines, altLabel, altFn, primLabel, primFn){
+  $("qTitle").textContent=title; const qt=$("qText"); qt.textContent=""; lines.forEach(t=>{ const p=document.createElement("p"); p.textContent=t; qt.appendChild(p); });
+  $("qUse").textContent=altLabel||""; $("qUse").hidden=!altLabel; state.qAlt=altFn||null;
+  $("qRetake").textContent=primLabel||"Retake photo"; state.qPrim=primFn||null;
+  $("qbox").classList.add("open"); cropStatus(""); $("qRetake").focus();
+}
+$("qUse").onclick=()=>{ $("qbox").classList.remove("open"); const f=state.qAlt; state.qAlt=null; if(f) f(); };
+$("qRetake").onclick=()=>{ $("qbox").classList.remove("open"); const f=state.qPrim; state.qPrim=null; if(f) f(); else pickPhoto(state.lastSource, !!crop.replaceFor); };
+
+/* ---------- find the card in a photo ---------- */
+function detect(px){
+  try{ const r=findCardQuad(px); if(r && !r.touches){ const ref=IP.refineRobust(px,r.quad,0.035); return IP.isConvex(ref)?ref:r.quad; } }catch{}
+  try{ const a=findCardAxis(px); if(a) return a.quad; }catch{}   // cards in toploaders / sleeves
+  return null;
+}
+function cleanUp(px, quad){
+  const mx=quad.reduce((s,p)=>s+p[0],0)/4, my=quad.reduce((s,p)=>s+p[1],0)/4;
+  const out=IP.warp(px, quad.map(p=>[mx+(p[0]-mx)*0.994, my+(p[1]-my)*0.994]), CARD_W, CARD_H);
+  const blur=IP.blurScore(out);
+  const cardPx=(Math.hypot(quad[3][0]-quad[0][0],quad[3][1]-quad[0][1])+Math.hypot(quad[2][0]-quad[1][0],quad[2][1]-quad[1][1]))/2;
+  const gl=IP.glareMask(out), issues=[];
+  if(blur>0.48) issues.push(["Photo too blurry","This photo is too blurry to see the card clearly. Hold your phone steady, tap the card on screen to focus, and take it again."]);
+  else if(cardPx<650) issues.push(["Card too small","The card is too small in this photo. Move closer so the card fills most of the frame."]);
+  if(gl.frac>0.05) issues.push(["Light reflection on the card","A strong reflection covers part of the card. Tilt the card slightly or move away from overhead lights, then retake."]);
+  if(gl.frac>0 && gl.frac<=0.08) IP.inpaint(out, gl.mask);
+  IP.levels(out); IP.sharpen(out,0.45);
+  const c=document.createElement("canvas"); c.width=CARD_W; c.height=CARD_H; c.getContext("2d").putImageData(new ImageData(out.data,CARD_W,CARD_H),0,0);
+  return { canvas:c, issues };
+}
+function rotate180(canvas){ const c=document.createElement("canvas"); c.width=canvas.width; c.height=canvas.height; const g=c.getContext("2d"); g.translate(c.width,c.height); g.rotate(Math.PI); g.drawImage(canvas,0,0); return c; }
+
+/* ---------- read name & number ---------- */
+let ocrWorker=null;
+async function ocrHint(canvas){
+  try{
+    if(!window.Tesseract) await new Promise((res,rej)=>{ const s=document.createElement("script"); s.src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+    if(!ocrWorker){ ocrWorker=await Tesseract.createWorker("eng"); await ocrWorker.setParameters({ tessedit_pageseg_mode:"11", tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/ " }); }
+    const w=canvas.width, h=canvas.height, region=document.createElement("canvas"); region.width=Math.round(w*0.6*2); region.height=Math.round(h*0.14*2);
+    const g=region.getContext("2d"); g.filter="grayscale(1) contrast(1.6)"; g.drawImage(canvas,0,h*0.86,w*0.6,h*0.14,0,0,region.width,region.height);
+    const inv=document.createElement("canvas"); inv.width=region.width; inv.height=region.height; const gi=inv.getContext("2d"); gi.filter="invert(1)"; gi.drawImage(region,0,0);
+    const text=(await ocrWorker.recognize(region)).data.text+" "+(await ocrWorker.recognize(inv)).data.text;
+    const s=text.replace(/[|\\]/g,"/").replace(/\s+/g," ");
+    const m=s.match(/([A-Z]{2}\d{2}|\d{1,3})\s?\/\s?([A-Z]{2}\d{2}|\d{2,3})/i);
+    const en=s.match(/\b([A-Z]{3})\s?EN\b/), jp=s.match(/\b(s[vV]?\d{1,2}[a-zA-Z]?|SV\d{1,2}[a-zA-Z]?|sm\d{1,2}[a-zA-Z]?)\b/);
+    return { number:m?m[1]:"", total:m?m[2]:"", setCode:en?en[1]:(jp?jp[1]:""), lang:en?"en":(jp?"ja":"") };
+  }catch{ return {}; }
+}
+async function identify(canvas){
+  const small=drawTo(canvas,1024);
+  const hint = state.ai ? {} : await ocrHint(canvas);
+  const body = { hint };
+  if(state.ai) body.image = await toB64(await toBlob(small,0.88));
+  return await api("/api/identify",{ method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(body) });
+}
+
+/* ---------- scanning flow ---------- */
+function pickPhoto(src, replace){ state.lastSource=src; crop.replaceFor = replace ? state.editing || state.viewing : null; $(src).value=""; $(src).click(); }
+$("scanBtn").onclick=()=>pickPhoto("camera"); $("uploadBtn").onclick=()=>pickPhoto("picker");
+$("camera").addEventListener("change",onPhoto); $("picker").addEventListener("change",onPhoto);
+async function onPhoto(e){
+  const files=Array.from(e.target.files||[]); if(!files.length) return;
+  if(files.length===1) scanOne(files[0]); else runBatch(files);
+}
+async function loadPhoto(file, token){
+  busy("Preparing photo…");
+  let bmp; try{ bmp=await decodeAny(file,t=>busy(t)); }catch{ return null; }
+  if(token!==crop.token) return null;
+  crop.src=drawTo(bmp,2400); try{ bmp.close&&bmp.close(); }catch{}
+  return crop.src;
+}
+async function scanOne(file){
+  const token=++crop.token; openCrop("Crop card"); $("cropOk").hidden=false; $("cropOk").disabled=true; crop.quad=null; drawQuad();
+  if(!(await loadPhoto(file, token))){ if(token===crop.token) cropStatus("That photo couldn't be opened. Use a JPEG, PNG, WebP or HEIC photo.", true); return; }
+  crop.quad=defaultQuad(crop.src.width,crop.src.height); layoutCrop();
+  busy("Finding the card…"); await frame();
+  const q=detect(getPixels(crop.src)); if(token!==crop.token) return;
+  if(q) crop.quad=q; drawQuad(); $("cropOk").disabled=false;
+  cropStatus(q ? "Check the yellow outline sits on the card's edges. Drag a corner to adjust, then tap Use this crop." : "Drag the yellow corners onto the card's four corners, then tap Use this crop.");
+}
+$("cropOk").onclick=async()=>{
+  if(!crop.src||!IP.isConvex(crop.quad)){ cropStatus("Drag the corners so the outline forms the card's shape.", true); return; }
+  $("cropOk").disabled=true; busy("Cleaning up the photo…"); await frame();
+  try{
+    const res=cleanUp(getPixels(crop.src), crop.quad);
+    if(res.issues.length){ showProblem(res.issues[0][0], res.issues.map(i=>i[1]), "Use anyway", ()=>finish(res.canvas)); return; }
+    await finish(res.canvas);
+  }catch{ cropStatus("Couldn't process this photo. Retake it.", true); }
+  finally{ $("cropOk").disabled=false; }
+};
+async function finish(canvas){
+  const token=crop.token;
+  try{
+    if(crop.replaceFor){ busy("Saving new photo…"); const card=await saveCard(canvas,null,crop.replaceFor); upsert(card); closeCrop(); toast("Photo replaced"); if(state.viewing) showViewerData(state.viewing); return; }
+    const r=await identifyAndSave(canvas, token);
+    if(r && r.card && token===crop.token){ closeCrop(); toast(r.card.needs_review ? "Saved. Add the name and number when you can." : `Saved ${r.card.name} #${r.card.number}`); }
+  }catch(e){ if(token===crop.token) showProblem("Saving failed",[e.message||"Check your connection and try again."], null, null, "Try again", ()=>finish(canvas)); }
+}
+async function identifyAndSave(canvas, token){
+  busy("Reading the name and number…");
+  let id={}; try{ id=await identify(canvas); }catch{ id={}; }
+  if(token!==crop.token) return null;
+  if(id.rotation===180){ canvas=rotate180(canvas); busy("Card was upside down. Reading again…"); try{ id=await identify(canvas); }catch{ id={}; } }
+  if(id.isCard===false) throw new Error("That doesn't look like a Pokémon card. Retake with the front facing up.");
+  busy(id.match ? `Saving ${id.match.name}…` : "Saving…");
+  const data={ name:(id.match&&id.match.name)||id.name||"", number:id.number||"", total:id.total||"", setCode:id.setCode||"", lang:id.lang||"", match:id.match||null };
+  const card=await saveCard(canvas,data,null); upsert(card); return { card };
+}
+async function saveCard(canvas, data, replaceId){
+  const fd=new FormData();
+  fd.append("image", await toBlob(canvas,0.85), "card.jpg");
+  fd.append("thumb", await toBlob(drawTo(canvas,420),0.8), "thumb.jpg");
+  if(replaceId){ const d=await api(`/api/cards/${replaceId}`,{method:"PATCH",body:fd}); return d.card; }
+  fd.append("data", JSON.stringify(data||{}));
+  const d=await api("/api/cards",{method:"POST",body:fd}); return d.card;
+}
+async function runBatch(files){
+  state.batchCancel=false; const saved=[], review=[], problems=[];
+  openCrop(""); $("cropOk").hidden=true;
+  for(let i=0;i<files.length;i++){
+    if(state.batchCancel) break;
+    const token=++crop.token; $("cropTitle").textContent=`Scanning ${i+1} of ${files.length}`; $("qbox").classList.remove("open"); crop.quad=null;
+    const f=files[i], label=f.name||`Photo ${i+1}`;
+    if(!(await loadPhoto(f, token))){ problems.push(`${label}: couldn't be opened`); continue; }
+    layoutCrop(); busy("Finding the card…"); await frame();
+    const q=detect(getPixels(crop.src));
+    if(!q){ problems.push(`${label}: card not found`); continue; }
+    crop.quad=q; drawQuad(); busy("Cleaning up the photo…"); await frame();
+    const res=cleanUp(getPixels(crop.src), q);
+    if(res.issues.length && res.issues[0][0]==="Photo too blurry"){ problems.push(`${label}: photo too blurry`); continue; }
+    try{ const r=await identifyAndSave(res.canvas, token); if(!r) continue; (r.card.needs_review?review:saved).push(r.card); }
+    catch(e){ problems.push(`${label}: ${e.message}`); }
+  }
+  if(state.batchCancel){ toast(`Stopped. Saved ${saved.length+review.length} card${saved.length+review.length===1?"":"s"}.`); return; }
+  $("cropTitle").textContent="Batch finished";
+  const lines=[`Saved ${saved.length+review.length} of ${files.length} photo${files.length===1?"":"s"}.`];
+  if(review.length) lines.push(`${review.length} saved card${review.length===1?" needs":"s need"} the name or number added.`);
+  if(problems.length){ lines.push(`${problems.length} need${problems.length===1?"s":""} a retake:`); problems.slice(0,12).forEach(p=>lines.push("• "+p)); }
+  showProblem(problems.length?"Some photos need a retake":"All cards saved", lines, null, null, "Done", closeCrop);
+}
+
+load();
+})();
+
+</script>
+</body>
+</html>

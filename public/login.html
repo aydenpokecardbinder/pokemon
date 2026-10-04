@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Owner login · PokeCardBinder</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🃏</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#E9EDF5;--surface:#fff;--ink:#1C2541;--muted:#5A6482;--line:#CDD4E4;--accent:#FFCB05;--blue:#3B5BA9;--danger:#C93C3C;
+  --display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;--body:"Atkinson Hyperlegible","Segoe UI",system-ui,-apple-system,sans-serif;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#111827;--surface:#1A2236;--ink:#E9EDF7;--muted:#9AA4BF;--line:#2E3A57;--blue:#8FA9EC;--danger:#F07A7A}}
+*,*::before,*::after{box-sizing:inherit}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);display:grid;place-items:center;padding:20px}
+.box{width:min(400px,100%);background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:26px 22px;box-shadow:0 18px 40px -24px rgba(28,37,65,.45)}
+h1{font-family:var(--display);font-weight:800;font-size:1.6rem;margin:0 0 4px;letter-spacing:-.02em}
+p.sub{margin:0 0 18px;color:var(--muted)}
+label{display:block;font-size:.88rem;color:var(--muted);margin:14px 0 6px}
+input{width:100%;height:48px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:0 14px;font:inherit;font-size:16px}
+input:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+button{margin-top:20px;width:100%;height:50px;border:2px solid var(--ink);border-radius:14px;background:var(--accent);color:#1C2541;font-family:var(--display);font-weight:800;font-size:1.05rem;cursor:pointer}
+button:disabled{opacity:.6;cursor:default}
+.err{color:var(--danger);min-height:1.4em;margin:12px 0 0;font-size:.95rem}
+a.back{display:inline-block;margin-top:16px;color:var(--blue);font-weight:700;text-decoration:none}
+</style>
+</head>
+<body>
+<main class="box">
+  <h1>Owner login</h1>
+  <p class="sub">Only the binder's owner can add, edit or delete cards. Everyone else can browse without logging in.</p>
+  <form id="f" novalidate>
+    <label for="u">Username</label>
+    <input id="u" name="username" autocomplete="username" autocapitalize="none" required>
+    <label for="p">Password</label>
+    <input id="p" name="password" type="password" autocomplete="current-password" required>
+    <button id="go" type="submit">Log in</button>
+    <p class="err" id="err" role="alert"></p>
+  </form>
+  <a class="back" href="/">← Back to the binder</a>
+</main>
+<script>
+const f=document.getElementById("f"), err=document.getElementById("err"), go=document.getElementById("go");
+fetch("/api/me").then(r=>r.json()).then(d=>{ if(d.owner) location.replace("/"); else if(!d.loginReady) err.textContent="Owner login isn't set up yet. See the setup guide."; }).catch(()=>{});
+f.addEventListener("submit", async e=>{
+  e.preventDefault(); err.textContent="";
+  const username=document.getElementById("u").value.trim(), password=document.getElementById("p").value;
+  if(!username||!password){ err.textContent="Enter your username and password."; return; }
+  go.disabled=true; go.textContent="Logging in…";
+  try{
+    const r=await fetch("/api/login",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({username,password}),credentials:"same-origin"});
+    const d=await r.json().catch(()=>({}));
+    if(r.ok){ location.replace("/"); return; }
+    err.textContent=d.error||"Login failed. Try again.";
+  }catch{ err.textContent="Couldn't reach the server. Check your connection."; }
+  go.disabled=false; go.textContent="Log in";
+});
+</script>
+</body>
+</html>
