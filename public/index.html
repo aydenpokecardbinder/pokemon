@@ -151,6 +151,8 @@ label.f{display:block;font-size:.85rem;color:var(--muted);margin:10px 0 4px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
 [hidden]{display:none!important}
+#pending .chip-btn{margin-left:6px;height:34px;font-weight:700}
+.err-line{margin-top:8px;font-size:.85rem;color:var(--danger);word-break:break-word}
 .owner-link{font-size:.9rem;color:var(--blue);font-weight:700;text-decoration:none;padding:8px 4px}
 .owner-link:hover{text-decoration:underline}
 .rate-note{font-size:.85rem;color:var(--muted)}
@@ -242,6 +244,7 @@ label.f{display:block;font-size:.85rem;color:var(--muted);margin:10px 0 4px}
     <span class="sp"></span>
     <button class="icon-btn" id="vOut" type="button" aria-label="Zoom out">−</button>
     <button class="icon-btn" id="vIn" type="button" aria-label="Zoom in">+</button>
+    <button class="icon-btn" id="vRead" type="button" aria-label="Read the card again" title="Read the card again" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
     <button class="icon-btn" id="vEdit" type="button" aria-label="Edit card" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>
     <button class="icon-btn" id="vDel" type="button" aria-label="Delete card" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
   </div>
@@ -715,7 +718,7 @@ async function load(){
 }
 function applyOwnerUI(me){
   $("scanBtn").hidden = $("uploadBtn").hidden = !state.owner;
-  $("vEdit").hidden = $("vDel").hidden = !state.owner;
+  $("vEdit").hidden = $("vDel").hidden = $("vRead").hidden = !state.owner;
   $("ownerLink").hidden = state.owner; $("logoutBtn").hidden = !state.owner;
   $("rateNote").textContent = `US$1 = S$${state.rate.toFixed(4).replace(/0+$/,"").replace(/\.$/,"")}`;
 }
@@ -731,7 +734,9 @@ function render(){
   $("count").textContent = n ? `Collection value across ${n} card${n>1?"s":""}` : "No cards yet";
   const review = state.cards.filter(c=>c.needs_review).length;
   $("pending").hidden = !(state.owner && review);
-  if(state.owner && review) $("pending").textContent = `${review} card${review>1?"s need":" needs"} details. Tap the card, then the pencil to add its name and number.`;
+  if(state.owner && review){ const pb=$("pending"); pb.textContent=`${review} card${review>1?"s need":" needs"} details. `;
+    const b=document.createElement("button"); b.className="chip-btn"; b.type="button"; b.textContent=review>1?"Read them again":"Read it again"; b.onclick=readAllAgain; pb.appendChild(b);
+    if(state.lastError){ const e=document.createElement("div"); e.className="err-line"; e.textContent="Last problem: "+state.lastError; pb.appendChild(e); } }
   const g = $("grid"); g.textContent = "";
   const list = filtered();
   if(!n){ g.innerHTML = `<div class="empty" style="grid-column:1/-1"><h3>${state.owner ? "Scan your first card" : "No cards yet"}</h3><p>${state.owner ? "Tap “Scan card”, take a photo of the front, and it lands in the binder." : "Check back soon."}</p></div>`; return; }
@@ -920,6 +925,33 @@ async function identify(canvas){
   return await api("/api/identify",{ method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(body) });
 }
 
+/* ---------- owner: read a saved card again ---------- */
+async function canvasFromCard(c){
+  const r=await fetch(imgUrl(c,false)); if(!r.ok) throw new Error("Couldn't load the photo.");
+  const bmp=await createImageBitmap(await r.blob()); const cv=document.createElement("canvas"); cv.width=bmp.width; cv.height=bmp.height; cv.getContext("2d").drawImage(bmp,0,0); return cv;
+}
+async function readAgain(c){
+  let canvas=await canvasFromCard(c);
+  let id; try{ id=await identify(canvas); }catch(e){ throw new Error(e.message); }
+  if(id.rotation===180){ canvas=rotate180(canvas); id=await identify(canvas); }
+  if(id.aiError) state.lastError=id.aiError;
+  if(!id.number && !id.name) throw new Error(id.aiError || "Couldn't read the name or number on this photo.");
+  const d=await api(`/api/cards/${c.id}`,{ method:"PATCH", headers:{"content-type":"application/json"}, body:JSON.stringify({
+    name:(id.match&&id.match.name)||id.name||"", number:id.number||"", total:id.total||"", setCode:id.setCode||"", lang:id.lang||"", relookup:true }) });
+  upsert(d.card); return d.card;
+}
+$("vRead").onclick=async()=>{ const c=state.cards.find(x=>x.id===state.viewing); if(!c) return;
+  const b=$("vRead"); b.disabled=true; toast("Reading the card…");
+  try{ const card=await readAgain(c); state.lastError=null; showViewerData(card.id); toast(card.name?`Found ${card.name}${card.number?" #"+card.number:""}`:"Read, but no match found"); }
+  catch(e){ state.lastError=e.message; toast(e.message); render(); }
+  finally{ b.disabled=false; } };
+async function readAllAgain(){
+  const list=state.cards.filter(c=>c.needs_review); let ok=0, i=0;
+  for(const c of list){ i++; $("pending").firstChild.textContent=`Reading ${i} of ${list.length}… `;
+    try{ await readAgain(c); ok++; }catch(e){ state.lastError=e.message; } }
+  toast(`Read ${ok} of ${list.length} card${list.length===1?"":"s"}`); render();
+}
+
 /* ---------- scanning flow ---------- */
 function pickPhoto(src, replace){ state.lastSource=src; crop.replaceFor = replace ? state.editing || state.viewing : null; $(src).value=""; $(src).click(); }
 $("scanBtn").onclick=()=>pickPhoto("camera"); $("uploadBtn").onclick=()=>pickPhoto("picker");
@@ -959,15 +991,16 @@ async function finish(canvas){
   try{
     if(crop.replaceFor){ busy("Saving new photo…"); const card=await saveCard(canvas,null,crop.replaceFor); upsert(card); closeCrop(); toast("Photo replaced"); if(state.viewing) showViewerData(state.viewing); return; }
     const r=await identifyAndSave(canvas, token);
-    if(r && r.card && token===crop.token){ closeCrop(); toast(r.card.needs_review ? "Saved. Add the name and number when you can." : `Saved ${r.card.name} #${r.card.number}`); }
+    if(r && r.card && token===crop.token){ closeCrop(); toast(r.card.needs_review ? ("Saved, but couldn't read the card" + (state.lastError ? ": " + state.lastError : ".")) : `Saved ${r.card.name} #${r.card.number}`); render(); }
   }catch(e){ if(token===crop.token) showProblem("Saving failed",[e.message||"Check your connection and try again."], null, null, "Try again", ()=>finish(canvas)); }
 }
 async function identifyAndSave(canvas, token){
   busy("Reading the name and number…");
-  let id={}; try{ id=await identify(canvas); }catch{ id={}; }
+  let id={}; try{ id=await identify(canvas); }catch(e){ id={ __error:e.message }; }
   if(token!==crop.token) return null;
   if(id.rotation===180){ canvas=rotate180(canvas); busy("Card was upside down. Reading again…"); try{ id=await identify(canvas); }catch{ id={}; } }
   if(id.isCard===false) throw new Error("That doesn't look like a Pokémon card. Retake with the front facing up.");
+  state.lastError = id.aiError || (id.__error || null);
   busy(id.match ? `Saving ${id.match.name}…` : "Saving…");
   const data={ name:(id.match&&id.match.name)||id.name||"", number:id.number||"", total:id.total||"", setCode:id.setCode||"", lang:id.lang||"", match:id.match||null };
   const card=await saveCard(canvas,data,null); upsert(card); return { card };
